@@ -5,8 +5,8 @@ declare module 'collection-storage' {
 
   export interface Collection<T> {
     add(entry: T): Promise<void>;
-    get(key: string, value: string, columns?: string[]): Promise<Readonly<T>>;
-    getAll(key: string, value: string, columns?: string[]): Promise<Readonly<T>[]>;
+    get(key: string, value: string, fields?: string[]): Promise<Readonly<T>>;
+    getAll(key: string, value: string, fields?: string[]): Promise<Readonly<T>[]>;
     update(key: string, value: string, update: Partial<T>, options?: UpdateOptions): Promise<void>;
   }
 
@@ -22,9 +22,28 @@ declare module 'collection-storage' {
   }
 
   export class MemoryDb implements DB {
+    public static connect(url: string): MemoryDb;
+
+    public constructor(options?: {
+      simulatedLatency?: number;
+    });
+
     public getCollection<T>(
       name: string,
       keys?: { [K in keyof T]?: KeyOptions },
     ): Collection<T>;
+  }
+
+  export class MongoDb implements DB {
+    public static connect(url: string): Promise<MongoDb>;
+
+    public getCollection<T>(
+      name: string,
+      keys?: { [K in keyof T]?: KeyOptions },
+    ): Collection<T>;
+  }
+
+  export default class CollectionStorage {
+    public static connect(url: string): Promise<DB>;
   }
 }
