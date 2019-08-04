@@ -5,9 +5,27 @@ declare module 'collection-storage' {
 
   export interface Collection<T> {
     add(entry: T): Promise<void>;
-    get(key: string, value: string, fields?: string[]): Promise<Readonly<T>>;
-    getAll(key: string, value: string, fields?: string[]): Promise<Readonly<T>[]>;
-    update(key: string, value: string, update: Partial<T>, options?: UpdateOptions): Promise<void>;
+
+    get(key: string, value: string): Promise<Readonly<T> | null>;
+    get<K extends readonly (keyof T)[]>(
+      key: string,
+      value: string,
+      fields: K,
+    ): Promise<Readonly<Pick<T, K[-1]>> | null>;
+
+    getAll(key: string, value: string): Promise<Readonly<T>[]>;
+    getAll<K extends readonly (keyof T)[]>(
+      key: string,
+      value: string,
+      fields: K,
+    ): Promise<Readonly<Pick<T, K[-1]>>[]>;
+
+    update(
+      key: string,
+      value: string,
+      update: Partial<T>,
+      options?: UpdateOptions,
+    ): Promise<void>;
   }
 
   interface KeyOptions {
