@@ -179,6 +179,14 @@ export default ({ factory }) => {
       expect(v2.a).toEqual('A2');
     });
 
+    it('allows setting unique columns to the same value', async () => {
+      await col.update('id', '2', { a: 'A2', b: 'updated' });
+
+      const v2 = await col.get('id', '2');
+      expect(v2.a).toEqual('A2');
+      expect(v2.b).toEqual('updated');
+    });
+
     it('rejects attempts to change the ID', async () => {
       let capturedError = null;
       try {
@@ -227,6 +235,18 @@ export default ({ factory }) => {
       await col.update('idx', '10', { b: 'updated' }, { upsert: true });
       const all = await col.getAll();
       expect(all.length).toEqual(4);
+    });
+
+    it('rejects duplicates if no value matches with upsert set', async () => {
+      let capturedError = null;
+      try {
+        await col.update('idx', '10', { a: 'A2' }, { upsert: true });
+      } catch (e) {
+        capturedError = e;
+      }
+      expect(capturedError).not.toEqual(null);
+      const all = await col.getAll();
+      expect(all.length).toEqual(3);
     });
   });
 };
