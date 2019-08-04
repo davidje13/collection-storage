@@ -200,6 +200,13 @@ export default ({ factory }) => {
       expect(v2).not.toEqual(null);
     });
 
+    it('allows setting ID to the same value', async () => {
+      await col.update('id', '2', { id: '2', b: 'updated' });
+
+      const v2 = await col.get('id', '2');
+      expect(v2.b).toEqual('updated');
+    });
+
     it('changes exactly one matching entry', async () => {
       await col.update('idx', '2', { b: 'updated' });
       const [v2, v3] = await Promise.all([

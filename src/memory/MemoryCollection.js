@@ -41,8 +41,8 @@ export default class MemoryCollection {
     return ids ? [...ids] : []; // convert set to array
   }
 
-  internalCheckDuplicates(value) {
-    if (this.data.has(value.id)) {
+  internalCheckDuplicates(value, checkId) {
+    if (checkId && this.data.has(value.id)) {
       throw new Error('duplicate');
     }
     this.keys.forEach(({ map, options }, key) => {
@@ -78,7 +78,7 @@ export default class MemoryCollection {
   async add(value) {
     await sleep(this.simulatedLatency);
 
-    this.internalCheckDuplicates(value);
+    this.internalCheckDuplicates(value, true);
     this.data.set(value.id, JSON.stringify(value));
     this.internalPopulateIndices(value);
   }
@@ -100,7 +100,7 @@ export default class MemoryCollection {
     }
     this.internalRemoveIndices(oldValue);
     try {
-      this.internalCheckDuplicates(value);
+      this.internalCheckDuplicates(value, false);
     } catch (e) {
       this.internalPopulateIndices(oldValue);
       throw e;
