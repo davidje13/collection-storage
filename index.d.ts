@@ -13,6 +13,7 @@ declare module 'collection-storage' {
       fields: K,
     ): Promise<Readonly<Pick<T, K[-1]>> | null>;
 
+    getAll(): Promise<Readonly<T>[]>;
     getAll(key: string, value: string): Promise<Readonly<T>[]>;
     getAll<K extends readonly (keyof T)[]>(
       key: string,
