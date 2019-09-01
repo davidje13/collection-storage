@@ -1,0 +1,20 @@
+import Collection from '../Collection';
+import IDable from '../IDable';
+import { DBKeys } from '../DB';
+export default class MemoryCollection<T extends IDable> implements Collection<T> {
+    private readonly simulatedLatency;
+    private readonly data;
+    private readonly keyList;
+    private readonly keys;
+    constructor(keys?: DBKeys<T>, simulatedLatency?: number);
+    add(value: T): Promise<void>;
+    update<K extends keyof T & string>(keyName: K, key: T[K], value: Partial<T>, { upsert }?: {
+        upsert?: boolean | undefined;
+    }): Promise<void>;
+    get<K extends keyof T & string, F extends readonly (keyof T & string)[]>(keyName: K, key: T[K], fields?: F): Promise<Readonly<Pick<T, F[-1]>> | null>;
+    getAll<K extends keyof T & string, F extends readonly (keyof T & string)[]>(keyName?: K, key?: T[K], fields?: F): Promise<Readonly<Pick<T, F[-1]>>[]>;
+    private internalGetIds;
+    private internalCheckDuplicates;
+    private internalPopulateIndices;
+    private internalRemoveIndices;
+}
