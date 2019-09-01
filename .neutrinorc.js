@@ -22,6 +22,8 @@ module.exports = {
             'consistent': true,
             'minProperties': 5,
           }],
+          'space-before-function-paren': ['off'],
+          'function-paren-newline': ['off'],
           '@typescript-eslint/indent': ['error', 2],
           '@typescript-eslint/await-thenable': ['error'],
           '@typescript-eslint/ban-ts-ignore': ['error'],
@@ -53,6 +55,10 @@ module.exports = {
           '@typescript-eslint/semi': ['error'],
           '@typescript-eslint/no-non-null-assertion': ['off'],
           '@typescript-eslint/no-explicit-any': ['off'],
+          'import/no-extraneous-dependencies': ['error', {
+            // mongodb is an optional peer dependency
+            'devDependencies': true,
+          }],
         },
       },
     }),

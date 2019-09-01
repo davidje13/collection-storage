@@ -1,8 +1,9 @@
 import MemoryDb from './memory/MemoryDb';
 import MongoDb from './mongo/MongoDb';
+import DB from './DB';
 
 export default class CollectionStorage {
-  static async connect(url) {
+  public static async connect(url: string): Promise<DB> {
     let dbClass;
     if (url.startsWith('memory')) {
       dbClass = MemoryDb;

@@ -3,12 +3,12 @@ import contract from '../db.contract-test';
 
 describe('MemoryDb', () => {
   contract({
-    factory: () => MemoryDb.connect('memory://?simulatedLatency=20'),
+    factory: (): MemoryDb => MemoryDb.connect('memory://?simulatedLatency=20'),
   });
 
   it('shares data between databases with the same name', async () => {
-    const db1 = await MemoryDb.connect('memory://foo');
-    const db2 = await MemoryDb.connect('memory://foo');
+    const db1 = MemoryDb.connect('memory://foo');
+    const db2 = MemoryDb.connect('memory://foo');
 
     const col1 = db1.getCollection('test');
     const col2 = db2.getCollection('test');
@@ -21,8 +21,8 @@ describe('MemoryDb', () => {
   });
 
   it('does not share data between unnamed databases', async () => {
-    const db1 = await MemoryDb.connect('memory://');
-    const db2 = await MemoryDb.connect('memory://');
+    const db1 = MemoryDb.connect('memory://');
+    const db2 = MemoryDb.connect('memory://');
 
     const col1 = db1.getCollection('test');
     const col2 = db2.getCollection('test');

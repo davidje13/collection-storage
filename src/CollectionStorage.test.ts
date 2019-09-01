@@ -1,10 +1,10 @@
 import CollectionStorage from './CollectionStorage';
+import MemoryDb from './memory/MemoryDb';
 
 describe('CollectionStorage.connect', () => {
   it('returns a database object asynchronously', async () => {
     const db = await CollectionStorage.connect('memory://');
-    expect(db).not.toEqual(null);
-    expect(typeof db.getCollection).toEqual('function');
+    expect(db).toBeInstanceOf(MemoryDb);
   });
 
   it('rejects unknown protocols', async () => {

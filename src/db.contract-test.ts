@@ -1,6 +1,18 @@
-export default ({ factory }) => {
-  let db;
-  let col;
+import DB from './DB';
+import Collection from './Collection';
+
+interface TestType {
+  id: string;
+  idx?: number;
+  idxs?: string;
+  value?: string;
+  a?: string;
+  b?: string;
+}
+
+export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
+  let db: DB;
+  let col: Collection<TestType>;
 
   beforeEach(async () => {
     db = await factory();
@@ -19,7 +31,7 @@ export default ({ factory }) => {
   });
 
   it('allows duplicates in non-unique indices and retrieves all', async () => {
-    col = db.getCollection('test-index', {
+    col = db.getCollection<TestType>('test-index', {
       idx: {},
     });
 
@@ -51,7 +63,7 @@ export default ({ factory }) => {
     });
 
     it('rejects duplicates in unique indices', async () => {
-      col = db.getCollection('test-unique', {
+      col = db.getCollection<TestType>('test-unique', {
         idx: { unique: true },
       });
 
@@ -69,7 +81,7 @@ export default ({ factory }) => {
 
   describe('get', () => {
     beforeEach(async () => {
-      col = db.getCollection('test-get', { idx: {} });
+      col = db.getCollection<TestType>('test-get', { idx: {} });
 
       await col.add({ id: '1', idx: 2, a: 'A1', b: 'B1' });
     });
@@ -91,7 +103,7 @@ export default ({ factory }) => {
 
     it('allows filters using any indexed attribute', async () => {
       const v = await col.get('idx', 2);
-      expect(v.id).toEqual('1');
+      expect(v!.id).toEqual('1');
     });
 
     it('returns null if no values match', async () => {
@@ -102,7 +114,7 @@ export default ({ factory }) => {
 
   describe('getAll', () => {
     beforeEach(async () => {
-      col = db.getCollection('test-get', { idx: {} });
+      col = db.getCollection<TestType>('test-get', { idx: {} });
 
       await Promise.all([
         col.add({ id: '1', idx: 1, a: 'A1', b: 'B1' }),
@@ -142,15 +154,15 @@ export default ({ factory }) => {
 
   describe('update', () => {
     beforeEach(async () => {
-      col = db.getCollection('test-update', {
-        idx: {},
+      col = db.getCollection<TestType>('test-update', {
+        idxs: {},
         a: { unique: true },
       });
 
       await Promise.all([
-        col.add({ id: '1', idx: '1', a: 'A1', b: 'B1' }),
-        col.add({ id: '2', idx: '2', a: 'A2', b: 'B2' }),
-        col.add({ id: '3', idx: '2', a: 'A3', b: 'B3' }),
+        col.add({ id: '1', idxs: '1', a: 'A1', b: 'B1' }),
+        col.add({ id: '2', idxs: '2', a: 'A2', b: 'B2' }),
+        col.add({ id: '3', idxs: '2', a: 'A3', b: 'B3' }),
       ]);
     });
 
@@ -161,9 +173,9 @@ export default ({ factory }) => {
         col.get('id', '2'),
         col.get('id', '3'),
       ]);
-      expect(v1.b).toEqual('B1');
-      expect(v2.b).toEqual('updated');
-      expect(v3.b).toEqual('B3');
+      expect(v1!.b).toEqual('B1');
+      expect(v2!.b).toEqual('updated');
+      expect(v3!.b).toEqual('B3');
     });
 
     it('rejects and rolls-back changes which cause duplicates', async () => {
@@ -176,15 +188,15 @@ export default ({ factory }) => {
       expect(capturedError).not.toEqual(null);
 
       const v2 = await col.get('id', '2');
-      expect(v2.a).toEqual('A2');
+      expect(v2!.a).toEqual('A2');
     });
 
     it('allows setting unique columns to the same value', async () => {
       await col.update('id', '2', { a: 'A2', b: 'updated' });
 
       const v2 = await col.get('id', '2');
-      expect(v2.a).toEqual('A2');
-      expect(v2.b).toEqual('updated');
+      expect(v2!.a).toEqual('A2');
+      expect(v2!.b).toEqual('updated');
     });
 
     it('rejects attempts to change the ID', async () => {
@@ -204,42 +216,42 @@ export default ({ factory }) => {
       await col.update('id', '2', { id: '2', b: 'updated' });
 
       const v2 = await col.get('id', '2');
-      expect(v2.b).toEqual('updated');
+      expect(v2!.b).toEqual('updated');
     });
 
     it('changes exactly one matching entry', async () => {
-      await col.update('idx', '2', { b: 'updated' });
+      await col.update('idxs', '2', { b: 'updated' });
       const [v2, v3] = await Promise.all([
         col.get('id', '2'),
         col.get('id', '3'),
       ]);
-      const updated2 = (v2.b === 'updated');
-      const updated3 = (v3.b === 'updated');
+      const updated2 = (v2!.b === 'updated');
+      const updated3 = (v3!.b === 'updated');
       expect(updated2).not.toEqual(updated3);
     });
 
     it('leaves unspecified properties unchanged', async () => {
       await col.update('id', '2', { b: 'updated' });
       const v2 = await col.get('id', '2');
-      expect(v2.a).toEqual('A2');
+      expect(v2!.a).toEqual('A2');
     });
 
     it('does nothing if no value matches', async () => {
-      await col.update('idx', '10', { b: 'updated' });
+      await col.update('idxs', '10', { b: 'updated' });
       const [v1, v2, v3] = await Promise.all([
         col.get('id', '1'),
         col.get('id', '2'),
         col.get('id', '3'),
       ]);
-      expect(v1.b).toEqual('B1');
-      expect(v2.b).toEqual('B2');
-      expect(v3.b).toEqual('B3');
+      expect(v1!.b).toEqual('B1');
+      expect(v2!.b).toEqual('B2');
+      expect(v3!.b).toEqual('B3');
       const all = await col.getAll();
       expect(all.length).toEqual(3);
     });
 
     it('adds a new record if no value matches with upsert set', async () => {
-      await col.update('idx', '10', { b: 'updated' }, { upsert: true });
+      await col.update('idxs', '10', { b: 'updated' }, { upsert: true });
       const all = await col.getAll();
       expect(all.length).toEqual(4);
     });
@@ -247,7 +259,7 @@ export default ({ factory }) => {
     it('rejects duplicates if no value matches with upsert set', async () => {
       let capturedError = null;
       try {
-        await col.update('idx', '10', { a: 'A2' }, { upsert: true });
+        await col.update('idxs', '10', { a: 'A2' }, { upsert: true });
       } catch (e) {
         capturedError = e;
       }
