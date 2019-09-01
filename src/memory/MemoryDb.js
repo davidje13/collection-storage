@@ -10,6 +10,11 @@ if (!global[globalNamespace]) {
 const globalDbs = global[globalNamespace];
 
 export default class MemoryDb {
+  constructor({ simulatedLatency = 0 } = {}) {
+    this.simulatedLatency = simulatedLatency;
+    this.mapTables = new Map();
+  }
+
   static connect(url) {
     const parsedUrl = new URL(url);
     const name = parsedUrl.hostname;
@@ -23,11 +28,6 @@ export default class MemoryDb {
       globalDbs.set(name, db);
     }
     return db;
-  }
-
-  constructor({ simulatedLatency = 0 } = {}) {
-    this.simulatedLatency = simulatedLatency;
-    this.mapTables = new Map();
   }
 
   getCollection(name, keys) {

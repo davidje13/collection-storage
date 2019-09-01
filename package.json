@@ -10,7 +10,7 @@
   "types": "index.d.ts",
   "scripts": {
     "build": "webpack --mode production",
-    "lint": "eslint --format codeframe --ext mjs,jsx,js src",
+    "lint": "eslint --format codeframe --ext mjs,jsx,js src && tsc",
     "test": "jest && npm run lint",
     "test:watch": "jest --watch"
   },
@@ -39,10 +39,13 @@
     "@neutrinojs/library": "^9.0.0-rc.3",
     "babel-plugin-transform-dynamic-import": "^2.1.0",
     "eslint": "^5.16.0",
-    "jest": "^24.8.0",
-    "mongodb": "^3.2.7",
+    "jest": "^24.9.0",
+    "mongodb": "^3.3.2",
     "neutrino": "^9.0.0-rc.3",
-    "webpack": "^4.39.1",
-    "webpack-cli": "^3.3.6"
+    "neutrino-typescript": "git+https://github.com/davidje13/neutrino-typescript#semver:^1.0.2",
+    "neutrino-typescript-eslint": "git+https://github.com/davidje13/neutrino-typescript-eslint#semver:^1.0.0",
+    "typescript": "^3.6.2",
+    "webpack": "^4.39.3",
+    "webpack-cli": "^3.3.7"
   }
 }
