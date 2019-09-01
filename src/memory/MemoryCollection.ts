@@ -25,19 +25,17 @@ function applyFilter<T, F extends readonly (keyof T)[]>(
   return result;
 }
 
-type ID = string;
-
-interface KeyInfo<T> {
+interface KeyInfo<ID, T> {
   map: Map<T, Set<ID>>;
   options: KeyOptions;
 }
 
 export default class MemoryCollection<T extends IDable> implements Collection<T> {
-  private readonly data: Map<ID, string>;
+  private readonly data: Map<T['id'], string>;
 
   private readonly keyList: (keyof T)[] = [];
 
-  private readonly keys: { [K in keyof T]?: KeyInfo<T[K]> } = {};
+  private readonly keys: { [K in keyof T]?: KeyInfo<T['id'], T[K]> } = {};
 
   public constructor(
     keys: DBKeys<T> = {},
@@ -116,7 +114,7 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
     await sleep(this.simulatedLatency);
 
-    let ids: ID[];
+    let ids: T['id'][];
     if (keyName) {
       ids = this.internalGetIds(keyName, key!);
     } else {
@@ -128,9 +126,12 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
     ));
   }
 
-  private internalGetIds<K extends keyof T>(keyName: K, key: T[K]): ID[] {
+  private internalGetIds<K extends keyof T>(
+    keyName: K,
+    key: T[K],
+  ): T['id'][] {
     if (keyName === 'id') {
-      const idKey = key as any as ID;
+      const idKey = key as T['id'];
       return this.data.has(idKey) ? [idKey] : [];
     }
     const keyInfo = this.keys[keyName];
@@ -159,7 +160,7 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
       const v = value[key];
       let o = map.get(v);
       if (!o) {
-        o = new Set<ID>();
+        o = new Set<T['id']>();
         map.set(v, o);
       }
       o.add(value.id);

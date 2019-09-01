@@ -1,3 +1,3 @@
 export default interface IDable {
-    id: string;
+    id: number | string;
 }
