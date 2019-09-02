@@ -31,13 +31,14 @@
     "url": "https://github.com/davidje13/collection-storage/issues"
   },
   "homepage": "https://github.com/davidje13/collection-storage#readme",
-  "dependencies": {},
+  "dependencies": {
+    "@types/mongodb": "^3.3.1"
+  },
   "devDependencies": {
     "@neutrinojs/airbnb-base": "^9.0.0-rc.3",
     "@neutrinojs/jest": "^9.0.0-rc.3",
     "@neutrinojs/library": "^9.0.0-rc.3",
     "@types/jest": "^24.0.18",
-    "@types/mongodb": "^3.3.1",
     "babel-plugin-transform-dynamic-import": "^2.1.0",
     "eslint": "^5.16.0",
     "jest": "^24.9.0",
