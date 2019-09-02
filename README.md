@@ -79,6 +79,96 @@ mongodb://[username:password@]host1[:port1][,...hostN[:portN]]][/[database][?opt
 See the [mongo documentation](https://docs.mongodb.com/manual/reference/connection-string/)
 for full details.
 
+## Encryption
+
+You can enable client-side encryption by wrapping the collections:
+
+The encryption used is aes-256-cbc.
+
+Any provided keys (`encryptByKey`) are not stored externally and never leave
+the server. These keys must remain constant through restarts and redeploys,
+and must be the same on all load-balanced instances. Generated keys
+(`encryptByRecord`) are stored in a provided collection (which does not have
+to be in the same database, or even in the same database type), and can be
+encrypted using a provided key which is not stored.
+
+```javascript
+import CollectionStorage, {
+  encryptByKey,
+  encryptByRecord,
+  encryptByRecordWithMasterKey,
+} from 'collection-storage';
+
+const dbUrl = 'memory://something';
+
+async function example() {
+  const db = await CollectionStorage.connect(dbUrl);
+
+  // input keys must be 32 bytes in base64 format, e.g.:
+  const rootKey = crypto.randomBytes(32).toString('base64');
+
+  // Option 1: single key for all values
+  const enc1 = encryptByKey(rootKey);
+  const simpleCol1 = enc1(db.getCollection('simple1'), ['foo']);
+
+  // Option 2: unique key per value, non-encrypted key
+  const keyCol2 = db.getCollection('keys2');
+  const enc2 = encryptByRecord(keyCol2, 32); // cache 32 keys
+  const simpleCol2 = enc2(db.getCollection('simple2'), ['foo']);
+
+  // Option 3 (recommended): unique key per value, encrypted using global key
+  const keyCol3 = db.getCollection('keys3');
+  const enc3 = encryptByRecordWithMasterKey(rootKey, keyCol3, 32); // cache 32 keys
+  const simpleCol3 = enc3(db.getCollection('simple3'), ['foo']);
+
+  // option 3 is equivalent to:
+  const keyCol4 = encryptByKey(rootKey)(db.getCollection('keys4'), ['key']);
+  const enc4 = encryptByRecord(keyCol4, 32);
+  const simpleCol4 = enc4(db.getCollection('simple4'), ['foo']);
+
+  // For all options, the encryption is transparent:
+  await simpleCol1.add({ id: 10, foo: 'This is encrypted' });
+  const value1 = await simpleCol1.get('id', 10);
+  // value1 is { id: 10, foo: 'This is encrypted' }
+}
+```
+
+Notes:
+
+* You cannot query using encrypted columns
+* By default, encryption and decryption is done *synchronously* via the
+  built-in `crypto` APIs.
+
+To use another library for cryptography (e.g. to enable asynchronous
+operations), you can provide a final parameter to the `encryptBy*` function:
+
+```javascript
+const myEncryption = {
+  encrypt: async (key, input) => {
+    // input (string) => encrypted (string)
+  },
+
+  decrypt: async (key, encrypted) => {
+    // encrypted (string) => value (string)
+  },
+
+  generateKey: () => {
+    // return a random key
+    // this will be passed to the encrypt/decrypt functions as `key`
+  },
+
+  serialiseKey: (key) => {
+    // return a string representation of key
+  },
+
+  deserialiseKey: (data) => {
+    // reverse of serialiseKey
+  },
+};
+
+const enc = encryptByKey(rootKey, myEncryption);
+```
+
 ## API
 
 ### CollectionStorage
@@ -162,6 +252,59 @@ const values = await collection.getAll(searchAttr, searchValue, [attrs]);
 
 Like `get`, but returns a list of all matching values. If no values
 match, returns an empty list.
+
+### Encrypted
+
+#### `encryptByKey`
+
+```javascript
+const enc = encryptByKey(key, [customEncryption]);
+const collection = enc(baseCollection, ['encryptedField', 'another']);
+```
+
+Returns a function which can wrap collections with encryption.
+
+By default the provided `key` should be a 32-byte buffer encoded as base64.
+If custom encryption is used, the key should conform to its expectations.
+
+See example notes above for an example on using `customEncryption`.
+
+#### `encryptByRecord`
+
+```javascript
+const enc = encryptByRecord(keyCollection, [cacheSize], [customEncryption]);
+const collection = enc(baseCollection, ['myEncryptedField', 'another']);
+```
+
+Returns a function which can wrap collections with encryption.
+
+Stores one key per ID in `keyCollection` (unencrypted). If `cacheSize` is
+provided, uses a least-recently-used cache for keys to reduce database access.
+
+See example notes above for an example on using `customEncryption`.
+
+#### `encryptByRecordWithMasterKey`
+
+```javascript
+const enc = encryptByRecordWithMasterKey(masterKey, keyCollection, [cacheSize], [customEncryption]);
+const collection = enc(baseCollection, ['myEncryptedField', 'another']);
+```
+
+Returns a function which can wrap collections with encryption.
+
+Stores one key per ID in `keyCollection` (encrypted using `masterKey`).
+If `cacheSize` is provided, uses a least-recently-used cache for keys to
+reduce database access.
+
+This is equivalent to:
+
+```javascript
+const keys = encryptByKey(masterKey, [customEncryption])(keyCollection, ['key']);
+const enc = encryptByRecord(keys, [cacheSize], [customEncryption]);
+const collection = enc(baseCollection, ['myEncryptedField', 'another']);
+```
+
+See example notes above for an example on using `customEncryption`.
 
 ## Development
 
