@@ -109,22 +109,22 @@ async function example() {
 
   // Option 1: single key for all values
   const enc1 = encryptByKey(rootKey);
-  const simpleCol1 = enc1(db.getCollection('simple1'), ['foo']);
+  const simpleCol1 = enc1(['foo'], db.getCollection('simple1'));
 
   // Option 2: unique key per value, non-encrypted key
   const keyCol2 = db.getCollection('keys2');
   const enc2 = encryptByRecord(keyCol2, 32); // cache 32 keys
-  const simpleCol2 = enc2(db.getCollection('simple2'), ['foo']);
+  const simpleCol2 = enc2(['foo'], db.getCollection('simple2'));
 
   // Option 3 (recommended): unique key per value, encrypted using global key
   const keyCol3 = db.getCollection('keys3');
   const enc3 = encryptByRecordWithMasterKey(rootKey, keyCol3, 32); // cache 32 keys
-  const simpleCol3 = enc3(db.getCollection('simple3'), ['foo']);
+  const simpleCol3 = enc3(['foo'], db.getCollection('simple3'));
 
   // option 3 is equivalent to:
-  const keyCol4 = encryptByKey(rootKey)(db.getCollection('keys4'), ['key']);
+  const keyCol4 = encryptByKey(rootKey)(['key'], db.getCollection('keys4'));
   const enc4 = encryptByRecord(keyCol4, 32);
-  const simpleCol4 = enc4(db.getCollection('simple4'), ['foo']);
+  const simpleCol4 = enc4(['foo'], db.getCollection('simple4'));
 
   // For all options, the encryption is transparent:
   await simpleCol1.add({ id: 10, foo: 'This is encrypted' });
@@ -259,7 +259,7 @@ match, returns an empty list.
 
 ```javascript
 const enc = encryptByKey(key, [customEncryption]);
-const collection = enc(baseCollection, ['encryptedField', 'another']);
+const collection = enc(['encryptedField', 'another'], baseCollection);
 ```
 
 Returns a function which can wrap collections with encryption.
@@ -273,7 +273,7 @@ See example notes above for an example on using `customEncryption`.
 
 ```javascript
 const enc = encryptByRecord(keyCollection, [cacheSize], [customEncryption]);
-const collection = enc(baseCollection, ['myEncryptedField', 'another']);
+const collection = enc(['myEncryptedField', 'another'], baseCollection);
 ```
 
 Returns a function which can wrap collections with encryption.
@@ -287,7 +287,7 @@ See example notes above for an example on using `customEncryption`.
 
 ```javascript
 const enc = encryptByRecordWithMasterKey(masterKey, keyCollection, [cacheSize], [customEncryption]);
-const collection = enc(baseCollection, ['myEncryptedField', 'another']);
+const collection = enc(['myEncryptedField', 'another'], baseCollection);
 ```
 
 Returns a function which can wrap collections with encryption.
@@ -301,7 +301,7 @@ This is equivalent to:
 ```javascript
 const keys = encryptByKey(masterKey, [customEncryption])(keyCollection, ['key']);
 const enc = encryptByRecord(keys, [cacheSize], [customEncryption]);
-const collection = enc(baseCollection, ['myEncryptedField', 'another']);
+const collection = enc(['myEncryptedField', 'another'], baseCollection);
 ```
 
 See example notes above for an example on using `customEncryption`.

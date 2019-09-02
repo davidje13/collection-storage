@@ -14,8 +14,8 @@ export const encryptByKey = <T extends IDable>(
   sKey: string,
   cr: Encryption<unknown> = nodeEncryptionSync,
 ) => <F extends readonly (keyof Omit<T, 'id'> & string)[]>(
-  baseCollection: Collection<Wrapped<T, F[-1], string>>,
   fields: F,
+  baseCollection: Collection<Wrapped<T, F[-1], string>>,
 ): Collection<T> => {
   const key = cr.deserialiseKey(sKey);
 
@@ -30,8 +30,8 @@ export const encryptByRecord = <T extends IDable>(
   cacheSize: number = 0,
   cr: Encryption<unknown> = nodeEncryptionSync,
 ) => <F extends readonly (keyof Omit<T, 'id'> & string)[]>(
-  baseCollection: Collection<Wrapped<T, F[-1], string>>,
   fields: F,
+  baseCollection: Collection<Wrapped<T, F[-1], string>>,
 ): Collection<T> => {
   const cache = new LruCache<T['id'], unknown>(cacheSize);
 
@@ -72,10 +72,10 @@ export const encryptByRecordWithMasterKey = <T extends IDable>(
   cacheSize: number = 0,
   cr: Encryption<unknown> = nodeEncryptionSync,
 ) => <F extends readonly (keyof Omit<T, 'id'> & string)[]>(
-  baseCollection: Collection<Wrapped<T, F[-1], string>>,
   fields: F,
+  baseCollection: Collection<Wrapped<T, F[-1], string>>,
 ): Collection<T> => encryptByRecord<T>(
-  encryptByKey<KeyRecord<T['id']>>(sMasterKey, cr)(keyCollection, ['key']),
+  encryptByKey<KeyRecord<T['id']>>(sMasterKey, cr)(['key'], keyCollection),
   cacheSize,
   cr,
-)(baseCollection, fields);
+)(fields, baseCollection);

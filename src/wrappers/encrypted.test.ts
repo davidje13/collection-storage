@@ -26,7 +26,7 @@ describe('encryption', () => {
       const db = await CollectionStorage.connect('memory://');
       backingCol = db.getCollection('enc', { encrypted: {}, unencrypted: {} });
       const enc = encryptByKey<TestType>(rootKey);
-      col = enc(backingCol, ['encrypted']);
+      col = enc(['encrypted'], backingCol);
     });
 
     it('stores and retrieves values transparently', async () => {
@@ -77,7 +77,7 @@ describe('encryption', () => {
       keyCol = db.getCollection('keys');
       backingCol = db.getCollection('enc', { encrypted: {}, unencrypted: {} });
       const enc = encryptByRecord<TestType>(keyCol);
-      col = enc(backingCol, ['encrypted']);
+      col = enc(['encrypted'], backingCol);
     });
 
     it('stores and retrieves values transparently', async () => {
@@ -140,7 +140,7 @@ describe('encryption', () => {
       keyCol = db.getCollection('keys');
       backingCol = db.getCollection('enc', { encrypted: {}, unencrypted: {} });
       const enc = encryptByRecordWithMasterKey<TestType>(rootKey, keyCol);
-      col = enc(backingCol, ['encrypted']);
+      col = enc(['encrypted'], backingCol);
     });
 
     it('stores and retrieves values transparently', async () => {
@@ -190,6 +190,17 @@ describe('encryption', () => {
       await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
 
       await expect(col.get('unencrypted', 4, ['unencrypted'])).rejects.toThrow();
+    });
+
+    it('infers types', async () => {
+      const db = await CollectionStorage.connect('memory://');
+      encryptByRecordWithMasterKey<TestType>(
+        rootKey,
+        db.getCollection('keys'),
+      )(
+        ['encrypted'],
+        db.getCollection('enc'),
+      );
     });
   });
 });
