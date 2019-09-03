@@ -1,9 +1,14 @@
 import IDable from '../interfaces/IDable';
 import Collection from '../interfaces/Collection';
 import LruCache from '../helpers/LruCache';
+import { serialiseValue, deserialiseValue } from '../helpers/serialiser';
 import WrappedCollection, { Wrapped } from './WrappedCollection';
 import Encryption from './encryption/Encryption';
 import nodeEncryptionSync from './encryption/nodeEncryptionSync';
+
+type EncT = Buffer;
+
+export type Encrypted<T extends IDable, WF extends keyof T> = Wrapped<T, WF, EncT>;
 
 export interface KeyRecord<ID> {
   id: ID;
@@ -12,26 +17,26 @@ export interface KeyRecord<ID> {
 
 export const encryptByKey = <T extends IDable>(
   sKey: string,
-  cr: Encryption<unknown> = nodeEncryptionSync,
+  cr: Encryption<EncT, unknown> = nodeEncryptionSync,
 ) => <F extends readonly (keyof Omit<T, 'id'> & string)[]>(
   fields: F,
-  baseCollection: Collection<Wrapped<T, F[-1], string>>,
+  baseCollection: Collection<Encrypted<T, F[-1]>>,
 ): Collection<T> => {
   const key = cr.deserialiseKey(sKey);
 
-  return new WrappedCollection<T, F, string, never>(baseCollection, fields, {
-    wrap: (k, v): Promise<string> | string => cr.encrypt(key, JSON.stringify(v)),
-    unwrap: async (k, v): Promise<any> => JSON.parse(await cr.decrypt(key, v)),
+  return new WrappedCollection<T, F, EncT, never>(baseCollection, fields, {
+    wrap: (k, v): Promise<EncT> | EncT => cr.encrypt(key, serialiseValue(v)),
+    unwrap: async (k, v): Promise<any> => deserialiseValue(await cr.decrypt(key, v)),
   });
 };
 
 export const encryptByRecord = <T extends IDable>(
   keyCollection: Collection<KeyRecord<T['id']>>,
   cacheSize: number = 0,
-  cr: Encryption<unknown> = nodeEncryptionSync,
+  cr: Encryption<EncT, unknown> = nodeEncryptionSync,
 ) => <F extends readonly (keyof Omit<T, 'id'> & string)[]>(
   fields: F,
-  baseCollection: Collection<Wrapped<T, F[-1], string>>,
+  baseCollection: Collection<Encrypted<T, F[-1]>>,
 ): Collection<T> => {
   const cache = new LruCache<T['id'], unknown>(cacheSize);
 
@@ -69,8 +74,8 @@ export const encryptByRecord = <T extends IDable>(
     cache.remove(id);
   };
 
-  return new WrappedCollection<T, F, string, unknown>(baseCollection, fields, {
-    wrap: (k, v, key): Promise<string> | string => cr.encrypt(key, JSON.stringify(v)),
+  return new WrappedCollection<T, F, EncT, unknown>(baseCollection, fields, {
+    wrap: (k, v, key): Promise<EncT> | EncT => cr.encrypt(key, JSON.stringify(v)),
     unwrap: async (k, v, key): Promise<any> => JSON.parse(await cr.decrypt(key, v)),
     preWrap: loadKey.bind(null, true),
     preUnwrap: loadKey.bind(null, false),
@@ -80,12 +85,12 @@ export const encryptByRecord = <T extends IDable>(
 
 export const encryptByRecordWithMasterKey = <T extends IDable>(
   sMasterKey: string,
-  keyCollection: Collection<KeyRecord<T['id']>>,
+  keyCollection: Collection<Encrypted<KeyRecord<T['id']>, 'key'>>,
   cacheSize: number = 0,
-  cr: Encryption<unknown> = nodeEncryptionSync,
+  cr: Encryption<EncT, unknown> = nodeEncryptionSync,
 ) => <F extends readonly (keyof Omit<T, 'id'> & string)[]>(
   fields: F,
-  baseCollection: Collection<Wrapped<T, F[-1], string>>,
+  baseCollection: Collection<Encrypted<T, F[-1]>>,
 ): Collection<T> => encryptByRecord<T>(
   encryptByKey<KeyRecord<T['id']>>(sMasterKey, cr)(['key'], keyCollection),
   cacheSize,

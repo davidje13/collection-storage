@@ -30,6 +30,30 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
     expect(retrieved === stored).toEqual(false);
   });
 
+  it('stores and retrieves JSON data', async () => {
+    const stored = { id: '1', value: { nested: ['hi', { object: 3 }] } };
+    const complexCol = db.getCollection<typeof stored>('test-json');
+
+    await complexCol.add(stored);
+
+    const retrieved = await complexCol.get('id', stored.id);
+
+    expect(retrieved!.value).toEqual(stored.value);
+    expect(retrieved === stored).toEqual(false);
+  });
+
+  it('stores and retrieves binary data', async () => {
+    const stored = { id: '1', value: Buffer.from('hello', 'utf8') };
+    const complexCol = db.getCollection<typeof stored>('test-json');
+
+    await complexCol.add(stored);
+
+    const retrieved = await complexCol.get('id', stored.id);
+
+    expect([...retrieved!.value]).toEqual([...stored.value]);
+    expect(retrieved === stored).toEqual(false);
+  });
+
   it('allows duplicates in non-unique indices and retrieves all', async () => {
     col = db.getCollection<TestType>('test-index', {
       idx: {},
@@ -109,6 +133,38 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
     it('returns null if no values match', async () => {
       const v = await col.get('idx', 3);
       expect(v).toEqual(null);
+    });
+
+    it('allows querying by JSON data', async () => {
+      const value = { nested: ['hi', { object: 3 }] };
+      const stored = { id: '1', value };
+      const complexCol = db.getCollection<typeof stored>('test-json-get', {
+        value: {},
+      });
+
+      await complexCol.add(stored);
+
+      const sameValue = Object.assign({}, value);
+      const otherValue = { nested: ['nah', { object: 3 }] };
+
+      expect((await complexCol.get('value', sameValue))!.id).toEqual('1');
+      expect((await complexCol.get('value', otherValue))).toBeNull();
+    });
+
+    it('allows querying by binary data', async () => {
+      const value = Buffer.from('hello', 'utf8');
+      const stored = { id: '1', value };
+      const complexCol = db.getCollection<typeof stored>('test-json-get', {
+        value: {},
+      });
+
+      await complexCol.add(stored);
+
+      const sameValue = Buffer.from(value);
+      const otherValue = Buffer.from('nah', 'utf8');
+
+      expect((await complexCol.get('value', sameValue))!.id).toEqual('1');
+      expect((await complexCol.get('value', otherValue))).toBeNull();
     });
   });
 

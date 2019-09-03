@@ -1,11 +1,11 @@
-export default interface Encryption<Key> {
-  encrypt(key: Key, v: string): Promise<string> | string;
+export default interface Encryption<EncT, KeyT> {
+  encrypt(key: KeyT, v: string): Promise<EncT> | EncT;
 
-  decrypt(key: Key, v: string): Promise<string> | string;
+  decrypt(key: KeyT, v: EncT): Promise<string> | string;
 
-  generateKey(): Promise<Key> | Key;
+  generateKey(): Promise<KeyT> | KeyT;
 
-  serialiseKey(key: Key): string;
+  serialiseKey(key: KeyT): string;
 
-  deserialiseKey(data: string): Key;
+  deserialiseKey(data: string): KeyT;
 }

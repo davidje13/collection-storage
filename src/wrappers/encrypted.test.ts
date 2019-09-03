@@ -4,8 +4,8 @@ import {
   encryptByRecord,
   encryptByRecordWithMasterKey,
   KeyRecord,
+  Encrypted,
 } from './encrypted';
-import { Wrapped } from './WrappedCollection';
 import CollectionStorage from '../CollectionStorage';
 import Collection from '../interfaces/Collection';
 
@@ -20,7 +20,7 @@ describe('encryption', () => {
 
   describe('encryptByKey', () => {
     let col: Collection<TestType>;
-    let backingCol: Collection<Wrapped<TestType, 'encrypted', string>>;
+    let backingCol: Collection<Encrypted<TestType, 'encrypted'>>;
 
     beforeEach(async () => {
       const db = await CollectionStorage.connect('memory://');
@@ -87,10 +87,38 @@ describe('encryption', () => {
     });
   });
 
+  describe('encryptByKey value types', () => {
+    it('supports JSON values', async () => {
+      const record = { id: 1, value: { foo: ['a', { bar: 7 }] } };
+
+      const db = await CollectionStorage.connect('memory://');
+      const enc = encryptByKey<typeof record>(rootKey);
+      const col = enc(['value'], db.getCollection('enc'));
+
+      await col.add(record);
+
+      const value = await col.get('id', 1);
+      expect(value).toEqual(record);
+    });
+
+    it('supports Buffer values', async () => {
+      const record = { id: 1, value: Buffer.from('hello', 'utf8') };
+
+      const db = await CollectionStorage.connect('memory://');
+      const enc = encryptByKey<typeof record>(rootKey);
+      const col = enc(['value'], db.getCollection('enc'));
+
+      await col.add(record);
+
+      const value = await col.get('id', 1);
+      expect([...value!.value]).toEqual([...record.value]);
+    });
+  });
+
   describe('encryptByRecord', () => {
     let col: Collection<TestType>;
     let keyCol: Collection<KeyRecord<string>>;
-    let backingCol: Collection<Wrapped<TestType, 'encrypted', string>>;
+    let backingCol: Collection<Encrypted<TestType, 'encrypted'>>;
 
     beforeEach(async () => {
       const db = await CollectionStorage.connect('memory://');
@@ -177,8 +205,8 @@ describe('encryption', () => {
 
   describe('encryptByRecordWithMasterKey', () => {
     let col: Collection<TestType>;
-    let keyCol: Collection<KeyRecord<string>>;
-    let backingCol: Collection<Wrapped<TestType, 'encrypted', string>>;
+    let keyCol: Collection<Encrypted<KeyRecord<string>, 'key'>>;
+    let backingCol: Collection<Encrypted<TestType, 'encrypted'>>;
 
     beforeEach(async () => {
       const db = await CollectionStorage.connect('memory://');
@@ -221,12 +249,16 @@ describe('encryption', () => {
     });
 
     it('does not load keys if no encrypted column is requested', async () => {
-      await backingCol.add({ id: 'a', unencrypted: 4, encrypted: 'meh' });
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
 
-      const value = await col.get('id', 'a', ['id', 'unencrypted']);
+      // copy backing item without copying key
+      const item = await backingCol.get('id', 'a');
+      await backingCol.add({ ...item!, id: 'b' });
+
+      const value = await col.get('id', 'b', ['id', 'unencrypted']);
       expect(value!.unencrypted).toEqual(4);
 
-      const keyValue = await keyCol.get('id', 'a');
+      const keyValue = await keyCol.get('id', 'b');
       expect(keyValue).not.toBeTruthy();
     });
 
@@ -243,7 +275,9 @@ describe('encryption', () => {
 
     it('throws if the requested record has corrupted data', async () => {
       await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-      await backingCol.update('id', 'a', { encrypted: 'nope' });
+      await backingCol.update('id', 'a', {
+        encrypted: Buffer.from('nope', 'utf8'),
+      });
 
       await expect(col.get('id', 'a')).rejects
         .toThrow('Unknown encryption algorithm');

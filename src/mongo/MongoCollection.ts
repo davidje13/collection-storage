@@ -1,4 +1,8 @@
-import { Collection as MCollection, Cursor as MCursor } from 'mongodb';
+import {
+  Collection as MCollection,
+  Cursor as MCursor,
+  Binary as MBinary,
+} from 'mongodb';
 import IDable from '../interfaces/IDable';
 import Collection from '../interfaces/Collection';
 import { DBKeys } from '../interfaces/DB';
@@ -16,21 +20,51 @@ function fieldNameToMongo(name: string): string {
 }
 
 function convertToMongo<T extends Partial<IDable>>(value: T): MongoT<T> {
-  if (!value || value[ID] === undefined) {
-    return value;
+  let converted: MongoT<T>;
+  // keys
+  if (value[ID] === undefined) {
+    converted = Object.assign({}, value);
+  } else {
+    const { [ID]: id, ...rest } = value;
+    converted = { [MONGO_ID]: id, ...rest };
   }
-  const { [ID]: id, ...rest } = value;
-  return { [MONGO_ID]: id, ...rest };
+  // values
+  Object.keys(converted).forEach((k) => {
+    const v = (converted as any)[k];
+    if (v instanceof Buffer) {
+      (converted as any)[k] = new MBinary(v);
+    }
+    // eslint-disable-next-line no-underscore-dangle
+    if (typeof v === 'object' && v._bsontype) {
+      throw new Error('Must use Buffer to provide binary data');
+    }
+  });
+  return converted;
 }
 
 function convertFromMongo<T extends Partial<IDable>>(
   value: MongoT<T> | null,
 ): T | null {
-  if (!value || value[MONGO_ID] === undefined) {
-    return value as T | null;
+  if (!value) {
+    return null;
   }
-  const { [MONGO_ID]: id, ...rest } = value;
-  return { [ID]: id, ...rest } as any;
+  let converted: T;
+  // keys
+  if (value[MONGO_ID] === undefined) {
+    converted = Object.assign({}, value) as T;
+  } else {
+    const { [MONGO_ID]: id, ...rest } = value;
+    converted = { [ID]: id, ...rest } as any;
+  }
+  // values
+  Object.keys(converted).forEach((k) => {
+    const v = (converted as any)[k];
+    // eslint-disable-next-line no-underscore-dangle
+    if (typeof v === 'object' && v._bsontype === 'Binary') {
+      (converted as any)[k] = v.buffer;
+    }
+  });
+  return converted;
 }
 
 function makeMongoFields(names?: readonly string[]): Record<string, boolean> {
@@ -71,7 +105,7 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     { upsert = false } = {},
   ): Promise<void> {
     await this.collection.updateOne(
-      { [fieldNameToMongo(keyName)]: key },
+      convertToMongo({ [keyName]: key }),
       { $set: convertToMongo(value) },
       { upsert },
     );
@@ -86,7 +120,7 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
     const raw = await this.collection.findOne<T>(
-      { [fieldNameToMongo(keyName)]: key },
+      convertToMongo({ [keyName]: key }),
       { projection: makeMongoFields(fields) },
     );
     return convertFromMongo<T>(raw);
@@ -106,7 +140,7 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     const mFields = makeMongoFields(fields);
     if (keyName) {
       cursor = this.collection.find<T>(
-        { [fieldNameToMongo(keyName)]: key },
+        convertToMongo({ [keyName]: key }),
         { projection: mFields },
       );
     } else {
@@ -122,7 +156,7 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     value: T[K],
   ): Promise<number> {
     const result = await this.collection.deleteMany(
-      { [fieldNameToMongo(key)]: value },
+      convertToMongo({ [key]: value }),
     );
     return result.deletedCount || 0;
   }

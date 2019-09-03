@@ -46,6 +46,12 @@ async function example() {
 
   // Next line throws an exception due to the duplicate key in 'bar'
   await indexedCol.add({ id: 4, foo: 'woo', bar: 'def', baz: 'xyz' });
+
+  // Binary data
+  const binaryCol = db.getCollection('my-binary-collection');
+  await binaryCol.add({ id: 10, someData: Buffer.from('abc', 'utf8') });
+  const data = await binaryCol.get('id', 10);
+  // data.someData is a Buffer
 }
 ```
 
@@ -145,11 +151,11 @@ operations), you can provide a final parameter to the `encryptBy*` function:
 ```javascript
 const myEncryption = {
   encrypt: async (key, input) => {
-    // input (string) => encrypted (string)
+    // input (string) => encrypted (Buffer)
   },
 
   decrypt: async (key, encrypted) => {
-    // encrypted (string) => value (string)
+    // encrypted (Buffer) => value (string)
   },
 
   generateKey: () => {
