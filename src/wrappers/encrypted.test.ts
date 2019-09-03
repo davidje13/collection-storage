@@ -78,6 +78,13 @@ describe('encryption', () => {
       expect(records.length).toEqual(1);
       expect(records[0].id).toEqual('c');
     });
+
+    it('allows getting all values', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+
+      const value = await col.getAll();
+      expect(value[0].encrypted).toEqual(9);
+    });
   });
 
   describe('encryptByRecord', () => {
@@ -158,6 +165,13 @@ describe('encryption', () => {
       const records = await backingCol.getAll();
       expect(records.length).toEqual(1);
       expect(records[0].id).toEqual('c');
+    });
+
+    it('allows getting all values', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+
+      const value = await col.getAll();
+      expect(value[0].encrypted).toEqual(9);
     });
   });
 
@@ -247,6 +261,40 @@ describe('encryption', () => {
       expect(backingValue!.unencrypted).toEqual(4);
     });
 
+    it('allows updating by id', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+      await col.update('id', 'a', { encrypted: 8 });
+
+      const value = await col.get('id', 'a');
+      expect(value!.encrypted).toEqual(8);
+    });
+
+    it('allows updating with id', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+      await col.update('unencrypted', 4, { id: 'a', encrypted: 8 });
+
+      const value = await col.get('id', 'a');
+      expect(value!.encrypted).toEqual(8);
+    });
+
+    it('allows upserting with id', async () => {
+      await col.update('id', 'a', { encrypted: 8 }, { upsert: true });
+
+      const value = await col.get('id', 'a');
+      expect(value!.encrypted).toEqual(8);
+    });
+
+    it('rejects updating without id', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+      await expect(col.update('unencrypted', 4, { encrypted: 8 })).rejects
+        .toThrow('Must provide ID for encryption');
+    });
+
+    it('rejects upserting without id', async () => {
+      await expect(col.update('unencrypted', 4, { encrypted: 8 }, { upsert: true })).rejects
+        .toThrow('Must provide ID for encryption');
+    });
+
     it('prevents reading by encrypted key', async () => {
       await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
 
@@ -259,6 +307,48 @@ describe('encryption', () => {
 
       await expect(col.get('unencrypted', 4, ['encrypted'])).rejects
         .toThrow('Must provide ID for encryption');
+    });
+
+    it('allows reading filtered columns with id', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+
+      const value = await col.get('unencrypted', 4, ['id', 'encrypted']);
+      expect(value!.encrypted).toEqual(9);
+    });
+
+    it('allows reading filtered columns if queried by id', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+
+      const value = await col.get('id', 'a', ['encrypted']);
+      expect(value!.encrypted).toEqual(9);
+    });
+
+    it('prevents reading filtered columns without id (getAll)', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+
+      await expect(col.getAll('unencrypted', 4, ['encrypted'])).rejects
+        .toThrow('Must provide ID for encryption');
+    });
+
+    it('allows reading filtered columns with id (getAll)', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+
+      const value = await col.getAll('unencrypted', 4, ['id', 'encrypted']);
+      expect(value[0].encrypted).toEqual(9);
+    });
+
+    it('allows reading filtered columns if queried by id (getAll)', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+
+      const value = await col.getAll('id', 'a', ['encrypted']);
+      expect(value[0].encrypted).toEqual(9);
+    });
+
+    it('allows getting all values', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+
+      const value = await col.getAll();
+      expect(value[0].encrypted).toEqual(9);
     });
 
     it('infers types', async () => {

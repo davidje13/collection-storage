@@ -65,7 +65,7 @@ export default class WrappedCollection<
       throw new Error('Cannot get by encrypted value');
     }
     const raw = await this.baseCollection.get(key, value, fields!);
-    return raw ? this.unwrapAll(raw) : null;
+    return raw ? this.unwrapAll(raw, { [key]: value }) : null;
   }
 
   public async getAll<
@@ -80,7 +80,8 @@ export default class WrappedCollection<
       throw new Error('Cannot get by encrypted value');
     }
     const raw = await this.baseCollection.getAll(key!, value!, fields!);
-    return Promise.all(raw.map((v) => this.unwrapAll(v)));
+    const extra = (key !== undefined) ? { [key]: value } : undefined;
+    return Promise.all(raw.map((v) => this.unwrapAll(v, extra)));
   }
 
   public async update<K extends keyof T & keyof Inner & string>(
@@ -92,7 +93,7 @@ export default class WrappedCollection<
     if (this.fields.includes(key as any)) {
       throw new Error('Cannot update by encrypted value');
     }
-    const converted = await this.wrapAll(update);
+    const converted = await this.wrapAll(update, { [key]: value });
     return this.baseCollection.update(key, value, converted, options);
   }
 
@@ -115,18 +116,24 @@ export default class WrappedCollection<
     return items.length;
   }
 
-  private async wrapAll(v: Readonly<T>): Promise<Inner>;
+  private async wrapAll(
+    v: Readonly<T>,
+    extra?: object,
+  ): Promise<Inner>;
 
   private async wrapAll(
     v: Readonly<Partial<T>>,
+    extra?: object,
   ): Promise<Partial<Inner>>;
 
   private async wrapAll(
     v: Readonly<Partial<T>>,
+    extra?: object,
   ): Promise<Partial<Inner>> {
     let processed: E;
     if (this.wrapper.preWrap && hasAnyField(v, this.fields)) {
-      processed = await this.wrapper.preWrap(v);
+      const allFields = extra ? Object.assign({}, extra, v) : v;
+      processed = await this.wrapper.preWrap(allFields);
     }
     const converted = Object.assign({}, v) as any;
     await Promise.all(this.fields.map(async (k) => {
@@ -137,18 +144,24 @@ export default class WrappedCollection<
     return converted;
   }
 
-  private async unwrapAll(v: Readonly<Inner>): Promise<T>;
+  private async unwrapAll(
+    v: Readonly<Inner>,
+    extra?: object,
+  ): Promise<T>;
 
   private async unwrapAll<K extends keyof T>(
     v: Readonly<Pick<Inner, K>>,
+    extra?: object,
   ): Promise<Pick<T, K>>;
 
   private async unwrapAll<K extends keyof T>(
     v: Readonly<Pick<Inner, K>>,
+    extra?: object,
   ): Promise<Pick<T, K>> {
     let processed: E;
     if (this.wrapper.preUnwrap && hasAnyField(v, this.fields)) {
-      processed = await this.wrapper.preUnwrap(v as any);
+      const allFields = extra ? Object.assign({}, extra, v) : v;
+      processed = await this.wrapper.preUnwrap(allFields as any);
     }
     const converted = Object.assign({}, v) as any;
     await Promise.all(this.fields.map(async (k) => {
