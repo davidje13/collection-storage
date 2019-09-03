@@ -64,11 +64,17 @@ export const encryptByRecord = <T extends IDable>(
     return key;
   };
 
+  const removeKey = async ({ id }: Pick<T, 'id'>): Promise<void> => {
+    await keyCollection.remove('id', id);
+    cache.remove(id);
+  };
+
   return new WrappedCollection<T, F, string, unknown>(baseCollection, fields, {
     wrap: (k, v, key): Promise<string> | string => cr.encrypt(key, JSON.stringify(v)),
     unwrap: async (k, v, key): Promise<any> => JSON.parse(await cr.decrypt(key, v)),
     preWrap: loadKey.bind(null, true),
     preUnwrap: loadKey.bind(null, false),
+    preRemove: removeKey,
   });
 };
 

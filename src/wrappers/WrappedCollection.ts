@@ -25,6 +25,10 @@ export interface Wrapper<T extends IDable, K extends keyof T, W, E> {
   preUnwrap?: (
     record: Readonly<Partial<Wrapped<T, K, W>>>,
   ) => Promise<E> | E;
+
+  preRemove?: (
+    record: Readonly<Pick<Wrapped<T, K, W>, 'id'>>,
+  ) => Promise<void> | void;
 }
 
 function hasAnyField(value: object, fields: readonly string[]): boolean {
@@ -90,6 +94,25 @@ export default class WrappedCollection<
     }
     const converted = await this.wrapAll(update);
     return this.baseCollection.update(key, value, converted, options);
+  }
+
+  public async remove<K extends keyof T & string>(
+    key: K,
+    value: T[K] & Inner[K],
+  ): Promise<number> {
+    if (this.fields.includes(key as any)) {
+      throw new Error('Cannot remove by encrypted value');
+    }
+    if (!this.wrapper.preRemove) {
+      return this.baseCollection.remove(key, value);
+    }
+
+    const items = await this.baseCollection.getAll(key, value, ['id']);
+    await Promise.all(items.map(async (item) => {
+      await this.wrapper.preRemove!(item);
+      await this.baseCollection.remove('id', item.id);
+    }));
+    return items.length;
   }
 
   private async wrapAll(v: Readonly<T>): Promise<Inner>;

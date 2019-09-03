@@ -268,4 +268,46 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
       expect(all.length).toEqual(3);
     });
   });
+
+  describe('remove', () => {
+    beforeEach(async () => {
+      col = db.getCollection<TestType>('test-remove', { idxs: {} });
+
+      await Promise.all([
+        col.add({ id: '1', idxs: '1' }),
+        col.add({ id: '2', idxs: '2' }),
+        col.add({ id: '3', idxs: '2' }),
+      ]);
+    });
+
+    it('removes items from the collection', async () => {
+      await col.remove('id', '2');
+
+      expect(new Set(await col.getAll())).toEqual(new Set([
+        { id: '1', idxs: '1' },
+        { id: '3', idxs: '2' },
+      ]));
+    });
+
+    it('removes all items matching the query', async () => {
+      await col.remove('idxs', '2');
+
+      expect(new Set(await col.getAll())).toEqual(new Set([
+        { id: '1', idxs: '1' },
+      ]));
+    });
+
+    it('returns the number of items removed', async () => {
+      const count = await col.remove('idxs', '2');
+      expect(count).toEqual(2);
+    });
+
+    it('returns 0 if no values match', async () => {
+      const count = await col.remove('idxs', '10');
+      expect(count).toEqual(0);
+
+      const remaining = await col.getAll();
+      expect(remaining.length).toEqual(3);
+    });
+  });
 };

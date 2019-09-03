@@ -35,4 +35,6 @@ export default interface Collection<T extends IDable> {
     update: Partial<T>,
     options?: UpdateOptions,
   ): Promise<void>;
+
+  remove<K extends keyof T & string>(key: K, value: T[K]): Promise<number>;
 }

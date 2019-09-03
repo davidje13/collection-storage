@@ -126,6 +126,22 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
     ));
   }
 
+  public async remove<K extends keyof T & string>(
+    key: K,
+    value: T[K],
+  ): Promise<number> {
+    await sleep(this.simulatedLatency);
+
+    const ids = this.internalGetIds(key, value);
+    ids.forEach((id) => {
+      const oldValue = JSON.parse(this.data.get(id)!) as T;
+      this.internalRemoveIndices(oldValue);
+      this.data.delete(id);
+    });
+
+    return ids.length;
+  }
+
   private internalGetIds<K extends keyof T>(
     keyName: K,
     key: T[K],

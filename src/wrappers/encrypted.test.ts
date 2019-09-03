@@ -66,6 +66,18 @@ describe('encryption', () => {
       expect(value!.encrypted).toEqual(9);
       expect((value as any).id).toEqual(undefined);
     });
+
+    it('removes backing records when records are removed', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+      await col.add({ id: 'b', unencrypted: 4, encrypted: 8 });
+      await col.add({ id: 'c', unencrypted: 5, encrypted: 7 });
+
+      await col.remove('unencrypted', 4);
+
+      const records = await backingCol.getAll();
+      expect(records.length).toEqual(1);
+      expect(records[0].id).toEqual('c');
+    });
   });
 
   describe('encryptByRecord', () => {
@@ -130,6 +142,22 @@ describe('encryption', () => {
 
       await expect(col.get('unencrypted', 4, ['encrypted'])).rejects
         .toThrow('Must provide ID for encryption');
+    });
+
+    it('removes backing records and keys when records are removed', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+      await col.add({ id: 'b', unencrypted: 4, encrypted: 8 });
+      await col.add({ id: 'c', unencrypted: 5, encrypted: 7 });
+
+      await col.remove('unencrypted', 4);
+
+      const keys = await keyCol.getAll();
+      expect(keys.length).toEqual(1);
+      expect(keys[0].id).toEqual('c');
+
+      const records = await backingCol.getAll();
+      expect(records.length).toEqual(1);
+      expect(records[0].id).toEqual('c');
     });
   });
 

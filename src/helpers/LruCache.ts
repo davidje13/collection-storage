@@ -19,6 +19,10 @@ export default class LruCache<K, V> {
     return value;
   }
 
+  public remove(key: K): void {
+    this.storage.delete(key);
+  }
+
   private flush(): void {
     while (this.storage.size > this.capacity) {
       this.storage.delete(this.storage.keys().next().value);

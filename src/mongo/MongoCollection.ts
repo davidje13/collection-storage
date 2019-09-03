@@ -116,4 +116,14 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
 
     return result;
   }
+
+  public async remove<K extends keyof T & string>(
+    key: K,
+    value: T[K],
+  ): Promise<number> {
+    const result = await this.collection.deleteMany(
+      { [fieldNameToMongo(key)]: value },
+    );
+    return result.deletedCount || 0;
+  }
 }
