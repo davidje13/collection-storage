@@ -1,7 +1,7 @@
 import { Collection as MCollection, Cursor as MCursor } from 'mongodb';
-import IDable from '../IDable';
-import Collection from '../Collection';
-import { DBKeys } from '../DB';
+import IDable from '../interfaces/IDable';
+import Collection from '../interfaces/Collection';
+import { DBKeys } from '../interfaces/DB';
 
 const MONGO_ID = '_id';
 const ID = 'id';

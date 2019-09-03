@@ -7,7 +7,7 @@ import {
 } from './encrypted';
 import { Wrapped } from './WrappedCollection';
 import CollectionStorage from '../CollectionStorage';
-import Collection from '../Collection';
+import Collection from '../interfaces/Collection';
 
 interface TestType {
   id: string;

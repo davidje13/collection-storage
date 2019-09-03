@@ -1,6 +1,6 @@
-import Collection, { KeyOptions } from '../Collection';
-import IDable from '../IDable';
-import { DBKeys } from '../DB';
+import Collection, { KeyOptions } from '../interfaces/Collection';
+import IDable from '../interfaces/IDable';
+import { DBKeys } from '../interfaces/DB';
 
 function sleep(millis: number): Promise<void> | null {
   if (!millis) {

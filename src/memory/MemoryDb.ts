@@ -1,7 +1,7 @@
 import { URL } from 'url';
 import MemoryCollection from './MemoryCollection';
-import DB, { DBKeys } from '../DB';
-import IDable from '../IDable';
+import DB, { DBKeys } from '../interfaces/DB';
+import IDable from '../interfaces/IDable';
 
 function getGlobal<T>(name: string, initial: T): T {
   const existing = (global as any)[name];

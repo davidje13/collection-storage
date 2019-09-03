@@ -1,5 +1,5 @@
-import IDable from '../IDable';
-import Collection, { UpdateOptions } from '../Collection';
+import IDable from '../interfaces/IDable';
+import Collection, { UpdateOptions } from '../interfaces/Collection';
 
 export type Wrapped<T extends IDable, WF extends keyof T, W> = {
   [K in keyof T]: K extends 'id' ? T[K] : K extends WF ? W : T[K];

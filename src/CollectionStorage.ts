@@ -1,6 +1,6 @@
 import MemoryDb from './memory/MemoryDb';
 import MongoDb from './mongo/MongoDb';
-import DB from './DB';
+import DB from './interfaces/DB';
 
 export default class CollectionStorage {
   public static async connect(url: string): Promise<DB> {

@@ -1,5 +1,5 @@
-import IDable from '../IDable';
-import Collection from '../Collection';
+import IDable from '../interfaces/IDable';
+import Collection from '../interfaces/Collection';
 import LruCache from '../helpers/LruCache';
 import WrappedCollection, { Wrapped } from './WrappedCollection';
 import Encryption from './encryption/Encryption';

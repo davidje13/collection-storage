@@ -1,9 +1,9 @@
 import CollectionStorage from './CollectionStorage';
 import WrappedCollection, { Wrapped } from './wrappers/WrappedCollection';
 import Encryption from './wrappers/encryption/Encryption';
-import DB from './DB';
-import Collection from './Collection';
-import IDable from './IDable';
+import DB from './interfaces/DB';
+import Collection from './interfaces/Collection';
+import IDable from './interfaces/IDable';
 
 export type DB = DB;
 export type Collection<T extends IDable> = Collection<T>;
