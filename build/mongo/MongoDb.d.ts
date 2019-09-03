@@ -1,6 +1,6 @@
 import MongoCollection from './MongoCollection';
-import DB, { DBKeys } from '../DB';
-import IDable from '../IDable';
+import DB, { DBKeys } from '../interfaces/DB';
+import IDable from '../interfaces/IDable';
 export default class MongoDb implements DB {
     private readonly db;
     private constructor();

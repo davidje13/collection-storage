@@ -4,5 +4,6 @@ export default class LruCache<K, V> {
     constructor(capacity: number);
     set(key: K, value: V): void;
     get(key: K): V | undefined;
+    remove(key: K): void;
     private flush;
 }

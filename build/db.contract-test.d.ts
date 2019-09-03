@@ -1,4 +1,4 @@
-import DB from './DB';
+import DB from './interfaces/DB';
 declare const _default: ({ factory }: {
     factory: () => DB | Promise<DB>;
 }) => void;

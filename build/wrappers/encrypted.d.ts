@@ -1,5 +1,5 @@
-import IDable from '../IDable';
-import Collection from '../Collection';
+import IDable from '../interfaces/IDable';
+import Collection from '../interfaces/Collection';
 import { Wrapped } from './WrappedCollection';
 import Encryption from './encryption/Encryption';
 export interface KeyRecord<ID> {

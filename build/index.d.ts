@@ -1,9 +1,9 @@
 import CollectionStorage from './CollectionStorage';
 import WrappedCollection, { Wrapped } from './wrappers/WrappedCollection';
 import Encryption from './wrappers/encryption/Encryption';
-import DB from './DB';
-import Collection from './Collection';
-import IDable from './IDable';
+import DB from './interfaces/DB';
+import Collection from './interfaces/Collection';
+import IDable from './interfaces/IDable';
 export declare type DB = DB;
 export declare type Collection<T extends IDable> = Collection<T>;
 export declare type Wrapped<T extends IDable, WF extends keyof T, W> = Wrapped<T, WF, W>;
