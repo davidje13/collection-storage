@@ -54,7 +54,8 @@ describe('encryption', () => {
     it('prevents reading by encrypted key', async () => {
       await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
 
-      await expect(col.get('encrypted', 9)).rejects.toThrow();
+      await expect(col.get('encrypted', 9)).rejects
+        .toThrow('Cannot get by encrypted value');
     });
 
     it('allows reading filtered columns', async () => {
@@ -120,13 +121,15 @@ describe('encryption', () => {
     it('prevents reading by encrypted key', async () => {
       await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
 
-      await expect(col.get('encrypted', 9)).rejects.toThrow();
+      await expect(col.get('encrypted', 9)).rejects
+        .toThrow('Cannot get by encrypted value');
     });
 
     it('prevents reading filtered columns without id', async () => {
       await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
 
-      await expect(col.get('unencrypted', 4, ['unencrypted'])).rejects.toThrow();
+      await expect(col.get('unencrypted', 4, ['encrypted'])).rejects
+        .toThrow('Must provide ID for encryption');
     });
   });
 
@@ -168,6 +171,42 @@ describe('encryption', () => {
       expect(valueA!.key).not.toEqual(valueB!.key);
     });
 
+    it('does not load keys if no encrypted column is written', async () => {
+      await col.update('id', 'a', { unencrypted: 4 }, { upsert: true });
+
+      const keyValue = await keyCol.get('id', 'a');
+      expect(keyValue).not.toBeTruthy();
+    });
+
+    it('does not load keys if no encrypted column is requested', async () => {
+      await backingCol.add({ id: 'a', unencrypted: 4, encrypted: 'meh' });
+
+      const value = await col.get('id', 'a', ['id', 'unencrypted']);
+      expect(value!.unencrypted).toEqual(4);
+
+      const keyValue = await keyCol.get('id', 'a');
+      expect(keyValue).not.toBeTruthy();
+    });
+
+    it('throws if the requested record does not have a key', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+
+      // copy backing item without copying key
+      const item = await backingCol.get('id', 'a');
+      await backingCol.add({ ...item!, id: 'b' });
+
+      await expect(col.get('id', 'b', ['id', 'encrypted'])).rejects
+        .toThrow('No encryption key found for record');
+    });
+
+    it('throws if the requested record has corrupted data', async () => {
+      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+      await backingCol.update('id', 'a', { encrypted: 'nope' });
+
+      await expect(col.get('id', 'a')).rejects
+        .toThrow('Unknown encryption algorithm');
+    });
+
     it('stores non-encrypted values without modification', async () => {
       await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
 
@@ -183,13 +222,15 @@ describe('encryption', () => {
     it('prevents reading by encrypted key', async () => {
       await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
 
-      await expect(col.get('encrypted', 9)).rejects.toThrow();
+      await expect(col.get('encrypted', 9)).rejects
+        .toThrow('Cannot get by encrypted value');
     });
 
     it('prevents reading filtered columns without id', async () => {
       await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
 
-      await expect(col.get('unencrypted', 4, ['unencrypted'])).rejects.toThrow();
+      await expect(col.get('unencrypted', 4, ['encrypted'])).rejects
+        .toThrow('Must provide ID for encryption');
     });
 
     it('infers types', async () => {

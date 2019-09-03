@@ -35,7 +35,10 @@ export const encryptByRecord = <T extends IDable>(
 ): Collection<T> => {
   const cache = new LruCache<T['id'], unknown>(cacheSize);
 
-  const loadKey = async (record: Partial<Pick<T, 'id'>>): Promise<unknown> => {
+  const loadKey = async (
+    generateIfNeeded: boolean,
+    record: Partial<Pick<T, 'id'>>,
+  ): Promise<unknown> => {
     const { id } = record;
 
     if (id === undefined) {
@@ -51,6 +54,9 @@ export const encryptByRecord = <T extends IDable>(
     if (item) {
       key = cr.deserialiseKey(item.key);
     } else {
+      if (!generateIfNeeded) {
+        throw new Error('No encryption key found for record');
+      }
       key = await cr.generateKey();
       await keyCollection.add({ id, key: cr.serialiseKey(key) });
     }
@@ -61,8 +67,8 @@ export const encryptByRecord = <T extends IDable>(
   return new WrappedCollection<T, F, string, unknown>(baseCollection, fields, {
     wrap: (k, v, key): Promise<string> | string => cr.encrypt(key, JSON.stringify(v)),
     unwrap: async (k, v, key): Promise<any> => JSON.parse(await cr.decrypt(key, v)),
-    preWrap: loadKey,
-    preUnwrap: loadKey,
+    preWrap: loadKey.bind(null, true),
+    preUnwrap: loadKey.bind(null, false),
   });
 };
 

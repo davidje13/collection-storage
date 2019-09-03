@@ -15,7 +15,7 @@ const nodeEncryptionSync: Encryption<KeyObject> = {
     const [alg, iv, encrypted] = v.split(':');
 
     if (alg !== ALG) {
-      throw new Error('Unknown algorithm');
+      throw new Error('Unknown encryption algorithm');
     }
 
     const decipher = crypto.createDecipheriv(

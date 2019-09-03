@@ -27,6 +27,11 @@ export interface Wrapper<T extends IDable, K extends keyof T, W, E> {
   ) => Promise<E> | E;
 }
 
+function hasAnyField(value: object, fields: readonly string[]): boolean {
+  return fields
+    .some((field) => Object.prototype.hasOwnProperty.call(value, field));
+}
+
 export default class WrappedCollection<
   T extends IDable,
   WF extends readonly (keyof Omit<T, 'id'> & string)[],
@@ -97,7 +102,7 @@ export default class WrappedCollection<
     v: Readonly<Partial<T>>,
   ): Promise<Partial<Inner>> {
     let processed: E;
-    if (this.wrapper.preWrap) {
+    if (this.wrapper.preWrap && hasAnyField(v, this.fields)) {
       processed = await this.wrapper.preWrap(v);
     }
     const converted = Object.assign({}, v) as any;
@@ -119,7 +124,7 @@ export default class WrappedCollection<
     v: Readonly<Pick<Inner, K>>,
   ): Promise<Pick<T, K>> {
     let processed: E;
-    if (this.wrapper.preUnwrap) {
+    if (this.wrapper.preUnwrap && hasAnyField(v, this.fields)) {
       processed = await this.wrapper.preUnwrap(v as any);
     }
     const converted = Object.assign({}, v) as any;
