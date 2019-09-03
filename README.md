@@ -253,6 +253,16 @@ const values = await collection.getAll(searchAttr, searchValue, [attrs]);
 Like `get`, but returns a list of all matching values. If no values
 match, returns an empty list.
 
+#### `remove`
+
+```javascript
+const count = await collection.remove(searchAttr, searchValue);
+```
+
+Removes all entries matching `searchAttr = searchValue`.
+
+Returns the number of records removed (0 if no records matched).
+
 ### Encrypted
 
 #### `encryptByKey`
@@ -280,6 +290,9 @@ Returns a function which can wrap collections with encryption.
 
 Stores one key per ID in `keyCollection` (unencrypted). If `cacheSize` is
 provided, uses a least-recently-used cache for keys to reduce database access.
+
+Updating a record re-encrypts using the same key. Removing records also
+removes the corresponding keys.
 
 See example notes above for an example on using `customEncryption`.
 
