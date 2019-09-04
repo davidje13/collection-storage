@@ -2,7 +2,7 @@ import crypto, { KeyObject } from 'crypto';
 import Encryption from './Encryption';
 
 const ALG = 'aes-256-cbc';
-const ALG_BUF = Buffer.from(ALG, 'utf8');
+const ALG_BUF = Buffer.from(`${ALG}:`, 'utf8');
 const IV_LEN = 16;
 
 const nodeEncryptionSync: Encryption<Buffer, KeyObject, Buffer> = {
