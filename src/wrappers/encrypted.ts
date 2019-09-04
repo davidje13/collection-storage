@@ -123,8 +123,8 @@ function encryptByRecord<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
   }));
 }
 
-function encryptByRecordWithMasterKey<ID extends IDType, SerialisedKeyT>(
-  sMasterKey: SerialisedKeyT,
+function encryptByRecordWithMasterKey<ID extends IDType>(
+  sMasterKey: Buffer,
   keyCollection: Collection<KeyRecord<ID, Buffer>>,
   cacheSize?: number,
 ): Encrypter<Buffer, ID>;

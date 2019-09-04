@@ -13,6 +13,6 @@ declare function encryptByKey(sKey: Buffer): Encrypter<Buffer, IDType>;
 declare function encryptByKey<EncT, KeyT, SerialisedKeyT>(sKey: SerialisedKeyT, cr: Encryption<EncT, KeyT, SerialisedKeyT>): Encrypter<EncT, IDType>;
 declare function encryptByRecord<ID extends IDType>(keyCollection: Collection<KeyRecord<ID, Buffer>>, cacheSize?: number): Encrypter<Buffer, ID>;
 declare function encryptByRecord<ID extends IDType, EncT, KeyT, SerialisedKeyT>(keyCollection: Collection<KeyRecord<ID, SerialisedKeyT>>, cacheSize: number, cr: Encryption<EncT, KeyT, SerialisedKeyT>): Encrypter<EncT, ID>;
-declare function encryptByRecordWithMasterKey<ID extends IDType, SerialisedKeyT>(sMasterKey: SerialisedKeyT, keyCollection: Collection<KeyRecord<ID, Buffer>>, cacheSize?: number): Encrypter<Buffer, ID>;
+declare function encryptByRecordWithMasterKey<ID extends IDType>(sMasterKey: Buffer, keyCollection: Collection<KeyRecord<ID, Buffer>>, cacheSize?: number): Encrypter<Buffer, ID>;
 declare function encryptByRecordWithMasterKey<ID extends IDType, EncT, KeyT, SerialisedKeyT>(sMasterKey: SerialisedKeyT, keyCollection: Collection<KeyRecord<ID, EncT>>, cacheSize: number, cr: Encryption<EncT, KeyT, SerialisedKeyT>): Encrypter<EncT, ID>;
 export { encryptByKey, encryptByRecord, encryptByRecordWithMasterKey, };
