@@ -5,7 +5,7 @@ const ALG = 'aes-256-cbc';
 const ALG_BUF = Buffer.from(ALG, 'utf8');
 const IV_LEN = 16;
 
-const nodeEncryptionSync: Encryption<Buffer, KeyObject> = {
+const nodeEncryptionSync: Encryption<Buffer, KeyObject, Buffer> = {
   encrypt: (key: KeyObject, v: string): Buffer => {
     const iv = crypto.randomBytes(IV_LEN);
     const cipher = crypto.createCipheriv(ALG, key, iv);
@@ -32,10 +32,9 @@ const nodeEncryptionSync: Encryption<Buffer, KeyObject> = {
   generateKey: (): KeyObject => crypto
     .createSecretKey(crypto.randomBytes(32)),
 
-  serialiseKey: (key: KeyObject): string => key.export().toString('base64'),
+  serialiseKey: (key: KeyObject): Buffer => key.export(),
 
-  deserialiseKey: (data: string): KeyObject => crypto
-    .createSecretKey(Buffer.from(data, 'base64')),
+  deserialiseKey: (data: Buffer): KeyObject => crypto.createSecretKey(data),
 };
 
 export default nodeEncryptionSync;

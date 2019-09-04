@@ -5,7 +5,6 @@ import {
   encryptByKey,
   encryptByRecord,
   encryptByRecordWithMasterKey,
-  Encrypted,
 } from './wrappers/encrypted';
 import DB from './interfaces/DB';
 import Collection from './interfaces/Collection';
@@ -13,9 +12,12 @@ import IDable from './interfaces/IDable';
 
 export type DB = DB;
 export type Collection<T extends IDable> = Collection<T>;
-export type Wrapped<T extends IDable, WF extends keyof T, W> = Wrapped<T, WF, W>;
-export type Encrypted<T extends IDable, WF extends keyof T> = Encrypted<T, WF>;
-export type Encryption<EncT, KeyT> = Encryption<EncT, KeyT>;
+export type Wrapped<T extends IDable, WF extends keyof T, W> =
+  Wrapped<T, WF, W>;
+export type Encrypted<T extends IDable, WF extends keyof T> =
+  Wrapped<T, WF, Buffer>;
+export type Encryption<EncT, KeyT, SerialisedKeyT> =
+  Encryption<EncT, KeyT, SerialisedKeyT>;
 
 export { default as MemoryDb } from './memory/MemoryDb';
 export { default as MongoDb } from './mongo/MongoDb';

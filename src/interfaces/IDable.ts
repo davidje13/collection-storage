@@ -1,4 +1,9 @@
+export type IDType = number | string;
+
 // eslint-disable-next-line @typescript-eslint/interface-name-prefix
-export default interface IDable {
-  id: number | string;
+export interface IDableBy<ID extends IDType> {
+  id: ID;
 }
+
+type IDable = IDableBy<IDType>;
+export default IDable;

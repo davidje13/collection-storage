@@ -1,15 +1,18 @@
 /// <reference types="node" />
-import IDable from '../interfaces/IDable';
+import { IDableBy, IDType } from '../interfaces/IDable';
 import Collection from '../interfaces/Collection';
 import { Wrapped } from './WrappedCollection';
 import Encryption from './encryption/Encryption';
-declare type EncT = Buffer;
-export declare type Encrypted<T extends IDable, WF extends keyof T> = Wrapped<T, WF, EncT>;
-export interface KeyRecord<ID> {
+export interface KeyRecord<ID extends IDType, KeyT> {
     id: ID;
-    key: string;
+    key: KeyT;
 }
-export declare const encryptByKey: <T extends IDable>(sKey: string, cr?: Encryption<Buffer, unknown>) => <F extends readonly (Exclude<keyof T, "id"> & string)[]>(fields: F, baseCollection: Collection<Wrapped<T, F[-1], Buffer>>) => Collection<T>;
-export declare const encryptByRecord: <T extends IDable>(keyCollection: Collection<KeyRecord<T["id"]>>, cacheSize?: number, cr?: Encryption<Buffer, unknown>) => <F extends readonly (Exclude<keyof T, "id"> & string)[]>(fields: F, baseCollection: Collection<Wrapped<T, F[-1], Buffer>>) => Collection<T>;
-export declare const encryptByRecordWithMasterKey: <T extends IDable>(sMasterKey: string, keyCollection: Collection<Wrapped<KeyRecord<T["id"]>, "key", Buffer>>, cacheSize?: number, cr?: Encryption<Buffer, unknown>) => <F extends readonly (Exclude<keyof T, "id"> & string)[]>(fields: F, baseCollection: Collection<Wrapped<T, F[-1], Buffer>>) => Collection<T>;
-export {};
+declare type EncryptableKeys<T> = readonly (keyof Omit<T, 'id'> & string)[];
+declare type Encrypter<EncT, ID extends IDType> = <T extends IDableBy<ID>>() => <F extends EncryptableKeys<T>>(fields: F, baseCollection: Collection<Wrapped<T, F[-1], EncT>>) => Collection<T>;
+declare function encryptByKey(sKey: Buffer): Encrypter<Buffer, IDType>;
+declare function encryptByKey<EncT, KeyT, SerialisedKeyT>(sKey: SerialisedKeyT, cr: Encryption<EncT, KeyT, SerialisedKeyT>): Encrypter<EncT, IDType>;
+declare function encryptByRecord<ID extends IDType>(keyCollection: Collection<KeyRecord<ID, Buffer>>, cacheSize?: number): Encrypter<Buffer, ID>;
+declare function encryptByRecord<ID extends IDType, EncT, KeyT, SerialisedKeyT>(keyCollection: Collection<KeyRecord<ID, SerialisedKeyT>>, cacheSize: number, cr: Encryption<EncT, KeyT, SerialisedKeyT>): Encrypter<EncT, ID>;
+declare function encryptByRecordWithMasterKey<ID extends IDType, SerialisedKeyT>(sMasterKey: SerialisedKeyT, keyCollection: Collection<KeyRecord<ID, Buffer>>, cacheSize?: number): Encrypter<Buffer, ID>;
+declare function encryptByRecordWithMasterKey<ID extends IDType, EncT, KeyT, SerialisedKeyT>(sMasterKey: SerialisedKeyT, keyCollection: Collection<KeyRecord<ID, EncT>>, cacheSize: number, cr: Encryption<EncT, KeyT, SerialisedKeyT>): Encrypter<EncT, ID>;
+export { encryptByKey, encryptByRecord, encryptByRecordWithMasterKey, };
