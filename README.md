@@ -110,8 +110,8 @@ const dbUrl = 'memory://something';
 async function example() {
   const db = await CollectionStorage.connect(dbUrl);
 
-  // input keys must be 32 bytes in base64 format, e.g.:
-  const rootKey = crypto.randomBytes(32).toString('base64');
+  // input keys must be 32 bytes, e.g.:
+  const rootKey = crypto.randomBytes(32);
 
   // Option 1: single key for all values
   const enc1 = encryptByKey(rootKey);
@@ -119,17 +119,17 @@ async function example() {
 
   // Option 2: unique key per value, non-encrypted key
   const keyCol2 = db.getCollection('keys2');
-  const enc2 = encryptByRecord(keyCol2, 32); // cache 32 keys
+  const enc2 = encryptByRecord(keyCol2, 50); // cache 50 keys
   const simpleCol2 = enc2(['foo'], db.getCollection('simple2'));
 
   // Option 3 (recommended): unique key per value, encrypted using global key
   const keyCol3 = db.getCollection('keys3');
-  const enc3 = encryptByRecordWithMasterKey(rootKey, keyCol3, 32); // cache 32 keys
+  const enc3 = encryptByRecordWithMasterKey(rootKey, keyCol3, 50); // cache 50 keys
   const simpleCol3 = enc3(['foo'], db.getCollection('simple3'));
 
   // option 3 is equivalent to:
   const keyCol4 = encryptByKey(rootKey)(['key'], db.getCollection('keys4'));
-  const enc4 = encryptByRecord(keyCol4, 32);
+  const enc4 = encryptByRecord(keyCol4, 50);
   const simpleCol4 = enc4(['foo'], db.getCollection('simple4'));
 
   // For all options, the encryption is transparent:
@@ -280,7 +280,7 @@ const collection = enc(['encryptedField', 'another'], baseCollection);
 
 Returns a function which can wrap collections with encryption.
 
-By default the provided `key` should be a 32-byte buffer encoded as base64.
+By default the provided `key` should be a 32-byte buffer.
 If custom encryption is used, the key should conform to its expectations.
 
 See example notes above for an example on using `customEncryption`.
