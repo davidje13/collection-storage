@@ -1,3 +1,4 @@
+import { Db as MDb } from 'mongodb';
 import MongoDb from './MongoDb';
 import contract from '../db.contract-test';
 
@@ -6,7 +7,8 @@ const url = process.env.MONGO_URL || 'mongodb://localhost:27017/collection-stora
 describe('MongoDb', () => contract({
   factory: async (): Promise<MongoDb> => {
     const db = await MongoDb.connect(url);
-    await (db as any).db.command({ dropDatabase: 1 });
+    const mdb = ((db as any).db as MDb);
+    await mdb.command({ dropDatabase: 1 });
     return db;
   },
 }));

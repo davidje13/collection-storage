@@ -21,6 +21,7 @@ export type Encryption<EncT, KeyT, SerialisedKeyT> =
 
 export { default as MemoryDb } from './memory/MemoryDb';
 export { default as MongoDb } from './mongo/MongoDb';
+export { default as RedisDb } from './redis/RedisDb';
 export { default as LruCache } from './helpers/LruCache';
 export {
   WrappedCollection,

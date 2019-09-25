@@ -56,7 +56,7 @@ module.exports = {
           '@typescript-eslint/no-non-null-assertion': ['off'],
           '@typescript-eslint/no-explicit-any': ['off'],
           'import/no-extraneous-dependencies': ['error', {
-            // mongodb is an optional peer dependency
+            // database connectors are optional peer dependencies
             'devDependencies': true,
           }],
         },

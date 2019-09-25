@@ -32,6 +32,7 @@
   },
   "homepage": "https://github.com/davidje13/collection-storage#readme",
   "dependencies": {
+    "@types/ioredis": "^4.0.18",
     "@types/mongodb": "^3.3.1"
   },
   "devDependencies": {
@@ -41,6 +42,7 @@
     "@types/jest": "^24.0.18",
     "babel-plugin-transform-dynamic-import": "^2.1.0",
     "eslint": "^5.16.0",
+    "ioredis": "^4.14.1",
     "jest": "^24.9.0",
     "mongodb": "^3.3.2",
     "neutrino": "^9.0.0-rc.3",
