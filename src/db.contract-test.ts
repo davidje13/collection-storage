@@ -255,6 +255,14 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
       expect(v2!.b).toEqual('updated');
     });
 
+    it('allows setting unique columns to historic values', async () => {
+      await col.update('id', '3', { a: 'A3b' });
+      await col.update('id', '2', { a: 'A3' });
+
+      const v2 = await col.get('id', '2');
+      expect(v2!.a).toEqual('A3');
+    });
+
     it('rejects attempts to change the ID', async () => {
       let capturedError = null;
       try {
@@ -358,7 +366,15 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
       expect(count).toEqual(2);
     });
 
-    it('returns 0 if no values match', async () => {
+    it('returns 0 if no values match for ID', async () => {
+      const count = await col.remove('id', 'no');
+      expect(count).toEqual(0);
+
+      const remaining = await col.getAll();
+      expect(remaining.length).toEqual(3);
+    });
+
+    it('returns 0 if no values match for field', async () => {
       const count = await col.remove('idxs', '10');
       expect(count).toEqual(0);
 
