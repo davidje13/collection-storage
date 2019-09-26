@@ -23,6 +23,7 @@
     "persistence",
     "database",
     "mongo",
+    "redis",
     "in-memory"
   ],
   "author": "David Evans",
