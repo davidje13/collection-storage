@@ -4,11 +4,6 @@ import Collection from '../interfaces/Collection';
 import { DBKeys } from '../interfaces/DB';
 import { serialiseValue, deserialiseValue } from '../helpers/serialiser';
 
-interface KeyInfo {
-  prefix: string;
-  unique: boolean;
-}
-
 function serialiseRecord<T>(
   record: T,
 ): Record<string, string> {
@@ -29,8 +24,17 @@ function deserialiseRecord(
   return result;
 }
 
+interface Key {
+  key: string;
+  prefix: string;
+}
+
 export default class RedisCollection<T extends IDable> implements Collection<T> {
-  private readonly keys: { [K in keyof T]?: KeyInfo } = {};
+  private readonly keyPrefixes: { [K in keyof T]?: string } = {};
+
+  private readonly keys: Key[] = [];
+
+  private readonly uniqueKeys: Key[] = [];
 
   public constructor(
     private readonly client: Redis,
@@ -39,18 +43,26 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
   ) {
     Object.keys(keys).forEach((k) => {
       const key = k as keyof DBKeys<T>;
-      this.keys[key] = {
-        prefix: `${prefix}-${key}`,
-        unique: Boolean(keys[key]!.unique),
-      };
+      const keyPrefix = `${prefix}-${key}`;
+      this.keyPrefixes[key] = keyPrefix;
+      const keyInfo = { key, prefix: keyPrefix };
+      this.keys.push(keyInfo);
+      if (keys[key]!.unique) {
+        this.uniqueKeys.push(keyInfo);
+      }
     });
   }
 
   public async add(value: T): Promise<void> {
     const serialised = serialiseRecord(value);
-    await this.internalCheckDuplicates(serialised, true);
-    await this.setByKey(serialised.id, serialised);
-    await this.internalPopulateIndices(serialised);
+    if (await this.client.exists(this.makeKey(serialised.id))) {
+      throw new Error('duplicate');
+    }
+    await this.internalCheckKeyDuplicates(serialised.id, serialised);
+    await this.runMulti([
+      this.setByKey(serialised.id, serialised),
+      ...this.internalMigrateIndices(serialised.id, {}, serialised),
+    ]);
   }
 
   public async update<K extends keyof T & string>(
@@ -59,29 +71,23 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     value: Partial<T>,
     { upsert = false } = {},
   ): Promise<void> {
-    const sId = (await this.internalGetSerialisedIds(keyName, key))[0];
-    if (sId === undefined) {
+    const patchSerialised = serialiseRecord(value);
+    const sId = (await this.internalGetPossibleSerialisedIds(keyName, key))[0];
+    if (patchSerialised.id && patchSerialised.id !== sId) {
+      throw new Error('Cannot update id');
+    }
+    const oldSerialised = await this.readByKey(sId, Object.keys(value) as any[]);
+    if (!oldSerialised) {
       if (upsert) {
         await this.add(Object.assign({ [keyName]: key }, value as T));
       }
       return;
     }
-    const oldSerialised = await this.getByKey(sId);
-    const oldValue = deserialiseRecord(oldSerialised) as T;
-    const newValue = Object.assign({}, oldValue, value);
-    if (newValue.id !== oldValue.id) {
-      throw new Error('Cannot update id');
-    }
-    const newSerialised = serialiseRecord(newValue);
-    await this.internalRemoveIndices(oldSerialised);
-    try {
-      await this.internalCheckDuplicates(newSerialised, false);
-    } catch (e) {
-      await this.internalPopulateIndices(oldSerialised);
-      throw e;
-    }
-    this.setByKey(newSerialised.id, newSerialised);
-    await this.internalPopulateIndices(newSerialised);
+    await this.internalCheckKeyDuplicates(sId, patchSerialised);
+    await this.runMulti([
+      this.setByKey(sId, patchSerialised),
+      ...this.internalMigrateIndices(sId, oldSerialised, patchSerialised),
+    ]);
   }
 
   public async get<
@@ -92,11 +98,8 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     key: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
-    const sId = (await this.internalGetSerialisedIds(keyName, key))[0];
-    if (sId === undefined) {
-      return null;
-    }
-    const value = await this.maybeGetByKey(sId, fields);
+    const sId = (await this.internalGetPossibleSerialisedIds(keyName, key))[0];
+    const value = await this.readByKey(sId, fields);
     if (!value) {
       return null;
     }
@@ -113,132 +116,160 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
     let sIds: string[];
     if (keyName) {
-      sIds = await this.internalGetSerialisedIds(keyName, key!);
+      sIds = await this.internalGetPossibleSerialisedIds(keyName, key!);
     } else {
       sIds = await this.client.keys(this.makeKey('*'));
       const cut = this.prefix.length + 1;
       sIds = sIds.map((v) => v.substr(cut));
     }
-    return Promise.all(sIds.map(async (sId) => deserialiseRecord(
-      await this.getByKey(sId, fields),
-    ) as T));
+    const items = await this.readByKeys(sIds, fields);
+    return items.map(deserialiseRecord) as T[];
   }
 
   public async remove<K extends keyof T & string>(
     key: K,
     value: T[K],
   ): Promise<number> {
-    const sIds = await this.internalGetSerialisedIds(key, value);
-    if (sIds.length === 0) {
+    const indexedKeys = Object.keys(this.keyPrefixes) as any[];
+    indexedKeys.push('id');
+
+    const sIds = await this.internalGetPossibleSerialisedIds(key, value);
+    const items = await this.readByKeys(sIds, indexedKeys);
+    if (items.length === 0) {
       return 0;
     }
-    await Promise.all(sIds.map(async (sId) => {
-      const oldSerialised = await this.getByKey(sId);
-      await this.internalRemoveIndices(oldSerialised);
-    }));
-    return this.client.del(...sIds.map(this.makeKey));
+
+    await this.runMulti([
+      ['del', ...items.map((item) => this.makeKey(item.id))],
+      ...items.flatMap((item) => this.internalMigrateIndices(item.id, item, {})),
+    ]);
+    return items.length;
   }
 
-  private makeKey = (
+  private makeKey(serialisedId: string): string {
+    return `${this.prefix}:${serialisedId}`;
+  }
+
+  private setByKey(
     serialisedId: string,
-  ): string => `${this.prefix}:${serialisedId}`;
-
-  private async setByKey(
-    serialisedKey: string,
     serialised: Record<string, string>,
-  ): Promise<void> {
-    const keyValues: any[] = [];
-    Object.entries(serialised).forEach(([k, v]) => {
-      keyValues.push(k);
-      keyValues.push(v);
-    });
-    await this.client.hmset(this.makeKey(serialisedKey), ...keyValues);
+  ): string[] {
+    return [
+      'hmset',
+      this.makeKey(serialisedId),
+      ...Object.entries(serialised).flat(),
+    ];
   }
 
-  private async getByKey<F extends readonly (keyof T & string)[]>(
-    serialisedKey: string,
+  private getByKey<F extends readonly (keyof T & string)[]>(
+    serialisedId: string,
     fields?: F,
-  ): Promise<Record<string, string>> {
-    const rkey = this.makeKey(serialisedKey);
+  ): string[] {
+    const key = this.makeKey(serialisedId);
     if (!fields) {
-      return this.client.hgetall(rkey);
+      return ['hgetall', key];
     }
-    const result: any = {};
-    const values = await this.client.hmget(rkey, ...fields);
-    for (let i = 0; i < fields.length; i += 1) {
-      result[fields[i]] = values[i];
-    }
-    return result;
+    return ['hmget', key, ...fields];
   }
 
-  private async maybeGetByKey<F extends readonly (keyof T & string)[]>(
-    serialisedKey: string,
+  private async readByKey<F extends readonly (keyof T & string)[]>(
+    serialisedId?: string,
     fields?: F,
-  ): Promise<Record<string, string> | null> {
-    const result = await this.getByKey(serialisedKey, fields);
-    const any = Object.values(result).some((v) => (v !== null));
-    return any ? result : null;
+  ): Promise<Record<string, string> | undefined> {
+    if (serialisedId === undefined) {
+      return undefined;
+    }
+    const items = await this.readByKeys([serialisedId], fields);
+    return items[0];
   }
 
-  private async internalGetSerialisedIds<K extends keyof T>(
+  private async readByKeys<F extends readonly (keyof T & string)[]>(
+    serialisedIds: string[],
+    fields?: F,
+  ): Promise<Record<string, string>[]> {
+    const results = await this.runMulti(serialisedIds.map((sId) => this.getByKey(sId, fields)));
+    let items;
+    if (fields) {
+      items = results.map(([, item]) => {
+        const result: any = {};
+        for (let f = 0; f < fields.length; f += 1) {
+          result[fields[f]] = item[f];
+        }
+        return result;
+      });
+    } else {
+      items = results.map(([, item]) => item);
+    }
+    return items.filter((item) => Object.values(item).some((v) => (v !== null)));
+  }
+
+  private async internalGetPossibleSerialisedIds<K extends keyof T>(
     keyName: K,
     key: T[K],
   ): Promise<string[]> {
     const sKey = serialiseValue(key);
     if (keyName === 'id') {
-      return (await this.client.exists(this.makeKey(sKey))) > 0 ? [sKey] : [];
+      return [sKey];
     }
-    const keyInfo = this.keys[keyName];
-    if (!keyInfo) {
+    const keyPrefix = this.keyPrefixes[keyName];
+    if (!keyPrefix) {
       throw new Error(`Requested key ${keyName} not indexed`);
     }
-    if (!keyInfo.unique) {
-      return this.client.smembers(`${keyInfo.prefix}:${sKey}`);
-    }
-    const sId = await this.client.get(`${keyInfo.prefix}:${sKey}`);
-    return (sId === null) ? [] : [sId];
+    return this.client.smembers(`${keyPrefix}:${sKey}`);
   }
 
-  private async internalCheckDuplicates(
-    serialisedValue: Record<string, string>,
-    checkId: boolean,
+  private async internalCheckKeyDuplicates(
+    serialisedId: string,
+    partialSerialisedValue: Record<string, string>,
   ): Promise<void> {
-    if (checkId && await this.client.exists(this.makeKey(serialisedValue.id))) {
+    const records = await this.runMulti(
+      this.uniqueKeys
+        .filter(({ key }) => partialSerialisedValue[key])
+        .map(({ key, prefix }) => (['smembers', `${prefix}:${partialSerialisedValue[key]}`])),
+    );
+    if (records.some(([, r]) => (r.length > 0 && r[0] !== serialisedId))) {
       throw new Error('duplicate');
     }
-    await Promise.all(Object.entries(this.keys).map(async ([key, keyInfo]) => {
-      const { prefix, unique } = keyInfo!;
-      if (unique && await this.client.exists(`${prefix}:${serialisedValue[key]}`)) {
-        throw new Error('duplicate');
-      }
-    }));
   }
 
-  private async internalPopulateIndices(
-    serialisedValue: Record<string, string>,
-  ): Promise<void> {
-    await Promise.all(Object.entries(this.keys).map(async ([key, keyInfo]) => {
-      const { prefix, unique } = keyInfo!;
-      const v = serialisedValue[key];
-      if (unique) {
-        await this.client.set(`${prefix}:${v}`, serialisedValue.id);
-      } else {
-        await this.client.sadd(`${prefix}:${v}`, serialisedValue.id);
+  private internalMigrateIndices(
+    serialisedId: string,
+    partialOldSerialisedValue: Record<string, string>,
+    partialNewSerialisedValue: Record<string, string>,
+  ): (string[] | null)[] {
+    return this.keys.map(({ key, prefix }) => {
+      if (!partialNewSerialisedValue[key]) {
+        if (!partialOldSerialisedValue[key]) {
+          return null;
+        }
+        return [
+          'srem',
+          `${prefix}:${partialOldSerialisedValue[key]}`,
+          serialisedId,
+        ];
       }
-    }));
+      if (!partialOldSerialisedValue[key]) {
+        return [
+          'sadd',
+          `${prefix}:${partialNewSerialisedValue[key]}`,
+          serialisedId,
+        ];
+      }
+      return [
+        'smove',
+        `${prefix}:${partialOldSerialisedValue[key]}`,
+        `${prefix}:${partialNewSerialisedValue[key]}`,
+        serialisedId,
+      ];
+    });
   }
 
-  private async internalRemoveIndices(
-    serialisedValue: Record<string, string>,
-  ): Promise<void> {
-    await Promise.all(Object.entries(this.keys).map(async ([key, keyInfo]) => {
-      const { prefix, unique } = keyInfo!;
-      const v = serialisedValue[key];
-      if (unique) {
-        await this.client.del(`${prefix}:${v}`);
-      } else {
-        await this.client.srem(`${prefix}:${v}`, serialisedValue.id);
-      }
-    }));
+  // returned values are [error, result] for each command
+  private async runMulti(commands: (string[] | null)[]): Promise<[unknown, any][]> {
+    const filtered = commands.filter(<T>(c: T | null): c is T => (c !== null));
+    if (!filtered.length) {
+      return [];
+    }
+    return this.client.multi(filtered).exec();
   }
 }

@@ -13,6 +13,7 @@ export declare type Encrypted<T extends IDable, WF extends keyof T> = Wrapped<T,
 export declare type Encryption<EncT, KeyT, SerialisedKeyT> = Encryption<EncT, KeyT, SerialisedKeyT>;
 export { default as MemoryDb } from './memory/MemoryDb';
 export { default as MongoDb } from './mongo/MongoDb';
+export { default as RedisDb } from './redis/RedisDb';
 export { default as LruCache } from './helpers/LruCache';
 export { WrappedCollection, encryptByKey, encryptByRecord, encryptByRecordWithMasterKey, };
 export { default as nodeEncryptionSync, } from './wrappers/encryption/nodeEncryptionSync';
