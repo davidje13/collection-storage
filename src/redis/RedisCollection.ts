@@ -71,9 +71,13 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     value: Partial<T>,
     { upsert = false } = {},
   ): Promise<void> {
+    if (upsert && keyName !== 'id' && value.id === undefined) {
+      throw new Error('Cannot upsert without ID');
+    }
+
     const patchSerialised = serialiseRecord(value);
     const sId = (await this.internalGetPossibleSerialisedIds(keyName, key))[0];
-    if (patchSerialised.id && patchSerialised.id !== sId) {
+    if (sId && patchSerialised.id && patchSerialised.id !== sId) {
       throw new Error('Cannot update id');
     }
     const oldSerialised = await this.readByKey(sId, Object.keys(value) as any[]);

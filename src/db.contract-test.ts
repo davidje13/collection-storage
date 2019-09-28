@@ -314,22 +314,44 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
       expect(all.length).toEqual(3);
     });
 
-    it('adds a new record if no value matches with upsert set', async () => {
-      await col.update('idxs', '10', { b: 'updated' }, { upsert: true });
-      const all = await col.getAll();
-      expect(all.length).toEqual(4);
-    });
+    describe('upsert', () => {
+      it('adds a new record if no value matches using key ID', async () => {
+        const data = { idxs: 'x', a: 'y', b: 'z' };
+        await col.update('id', '4', data, { upsert: true });
+        const all = await col.getAll();
+        expect(all.length).toEqual(4);
+      });
 
-    it('rejects duplicates if no value matches with upsert set', async () => {
-      let capturedError = null;
-      try {
-        await col.update('idxs', '10', { a: 'A2' }, { upsert: true });
-      } catch (e) {
-        capturedError = e;
-      }
-      expect(capturedError).not.toEqual(null);
-      const all = await col.getAll();
-      expect(all.length).toEqual(3);
+      it('adds a new record if no value matches using value ID', async () => {
+        const data = { id: '6', a: 'y', b: 'z' };
+        await col.update('idxs', 'x', data, { upsert: true });
+        const all = await col.getAll();
+        expect(all.length).toEqual(4);
+      });
+
+      it('rejects upserting new records without IDs', async () => {
+        let capturedError = null;
+        try {
+          await col.update('idxs', '10', { b: 'updated' }, { upsert: true });
+        } catch (e) {
+          capturedError = e;
+        }
+        expect(capturedError).not.toEqual(null);
+        const all = await col.getAll();
+        expect(all.length).toEqual(3);
+      });
+
+      it('rejects duplicates if no value matches', async () => {
+        let capturedError = null;
+        try {
+          await col.update('idxs', '10', { a: 'A2' }, { upsert: true });
+        } catch (e) {
+          capturedError = e;
+        }
+        expect(capturedError).not.toEqual(null);
+        const all = await col.getAll();
+        expect(all.length).toEqual(3);
+      });
     });
   });
 

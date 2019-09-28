@@ -83,6 +83,10 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
     value: Partial<T>,
     { upsert = false } = {},
   ): Promise<void> {
+    if (upsert && keyName !== 'id' && value.id === undefined) {
+      throw new Error('Cannot upsert without ID');
+    }
+
     await sleep(this.simulatedLatency);
 
     const sId = this.internalGetSerialisedIds(keyName, key)[0];

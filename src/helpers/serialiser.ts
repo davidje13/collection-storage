@@ -18,5 +18,5 @@ export function deserialiseValue(
   if (type === 'J') {
     return JSON.parse(data);
   }
-  throw new Error('Unknown data type');
+  throw new Error(`Unknown data type ${type}`);
 }
