@@ -7,6 +7,8 @@ export interface ScriptExtensions {
   remove(keyCount: number, ...keysAndArgs: any[]): Promise<void>;
 }
 
+export type ERedis = ExtendedRedis<ScriptExtensions>;
+
 // KEYS = [id, ...uniqueKeys, ...nonUniqueKeys]
 const SCRIPT_ADD_ITEM = minifyLuaScript([
   'if redis.call("exists",KEYS[1])==1 then',
@@ -47,12 +49,12 @@ const SCRIPT_REMOVE_ITEM = minifyLuaScript([
   'end',
 ], 'id');
 
-export default function defineAllScripts(
+export default async function defineAllScripts(
   client: Redis,
-): ExtendedRedis<ScriptExtensions> {
-  client.defineCommand('add', { lua: SCRIPT_ADD_ITEM });
-  client.defineCommand('update', { lua: SCRIPT_UPDATE_ITEM });
-  client.defineCommand('remove', { lua: SCRIPT_REMOVE_ITEM });
+): Promise<ERedis> {
+  await client.defineCommand('add', { lua: SCRIPT_ADD_ITEM });
+  await client.defineCommand('update', { lua: SCRIPT_UPDATE_ITEM });
+  await client.defineCommand('remove', { lua: SCRIPT_REMOVE_ITEM });
 
-  return client as ExtendedRedis<ScriptExtensions>;
+  return client as ERedis;
 }

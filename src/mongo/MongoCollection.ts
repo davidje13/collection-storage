@@ -6,6 +6,7 @@ import {
 import IDable from '../interfaces/IDable';
 import Collection from '../interfaces/Collection';
 import { DBKeys } from '../interfaces/DB';
+import retry from '../helpers/retry';
 
 const MONGO_ID = '_id';
 const ID = 'id';
@@ -18,6 +19,11 @@ function fieldNameToMongo(name: string): string {
   }
   return name;
 }
+
+const withUpsertRetry = retry((e) => (
+  typeof e === 'object' &&
+  e.message.includes('E11000')
+));
 
 function convertToMongo<T extends Partial<IDable>>(value: T): MongoT<T> {
   let converted: MongoT<T>;
@@ -108,11 +114,19 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
       throw new Error('Cannot upsert without ID');
     }
 
-    await this.collection.updateOne(
-      convertToMongo({ [keyName]: key }),
-      { $set: convertToMongo(value) },
-      { upsert },
-    );
+    if (upsert) {
+      // special handling due to https://jira.mongodb.org/browse/SERVER-14322
+      await withUpsertRetry(() => this.collection.updateOne(
+        convertToMongo({ [keyName]: key }),
+        { $set: convertToMongo(value) },
+        { upsert: true },
+      ));
+    } else {
+      await this.collection.updateOne(
+        convertToMongo({ [keyName]: key }),
+        { $set: convertToMongo(value) },
+      );
+    }
   }
 
   public async get<

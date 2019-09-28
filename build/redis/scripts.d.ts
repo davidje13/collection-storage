@@ -5,4 +5,5 @@ export interface ScriptExtensions {
     update(keyCount: number, ...keysAndArgs: any[]): Promise<number>;
     remove(keyCount: number, ...keysAndArgs: any[]): Promise<void>;
 }
-export default function defineAllScripts(client: Redis): ExtendedRedis<ScriptExtensions>;
+export declare type ERedis = ExtendedRedis<ScriptExtensions>;
+export default function defineAllScripts(client: Redis): Promise<ERedis>;

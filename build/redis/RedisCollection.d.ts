@@ -1,15 +1,15 @@
-import { Redis } from 'ioredis';
 import IDable from '../interfaces/IDable';
 import Collection from '../interfaces/Collection';
 import { DBKeys } from '../interfaces/DB';
+import RedisConnectionPool from './RedisConnectionPool';
 export default class RedisCollection<T extends IDable> implements Collection<T> {
+    private readonly pool;
     private readonly prefix;
-    private readonly client;
     private readonly keyPrefixes;
     private readonly keys;
     private readonly uniqueKeys;
     private readonly nonUniqueKeys;
-    constructor(client: Redis, prefix: string, keys?: DBKeys<T>);
+    constructor(pool: RedisConnectionPool, prefix: string, keys?: DBKeys<T>);
     add(value: T): Promise<void>;
     update<K extends keyof T & string>(keyName: K, key: T[K], value: Partial<T>, { upsert }?: {
         upsert?: boolean | undefined;

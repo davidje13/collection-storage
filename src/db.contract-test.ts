@@ -10,6 +10,20 @@ interface TestType {
   b?: string;
 }
 
+async function runAll<T>(promises: Promise<T>[]): Promise<T[]> {
+  // https://github.com/microsoft/TypeScript/issues/31083
+  const results = await (Promise as any).allSettled(promises);
+
+  const failures = results.filter((r: any) => r.status === 'rejected');
+  if (failures.length > 0) {
+    const description = failures
+      .map((r: any) => r.reason)
+      .join(', ');
+    throw new Error(`Parallel tasks failed: ${description}`);
+  }
+  return results.map((r: any) => r.value);
+}
+
 export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
   let db: DB;
   let col: Collection<TestType>;
@@ -59,7 +73,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
       idx: {},
     });
 
-    await Promise.all([
+    await runAll([
       col.add({ id: '1', idx: 8 }),
       col.add({ id: '2', idx: 8 }),
       col.add({ id: '3', idx: 10 }),
@@ -172,7 +186,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
     beforeEach(async () => {
       col = db.getCollection<TestType>('test-get', { idx: {} });
 
-      await Promise.all([
+      await runAll([
         col.add({ id: '1', idx: 1, a: 'A1', b: 'B1' }),
         col.add({ id: '2', idx: 2, a: 'A2', b: 'B2' }),
         col.add({ id: '3', idx: 2, a: 'A3', b: 'B3' }),
@@ -215,7 +229,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
         a: { unique: true },
       });
 
-      await Promise.all([
+      await runAll([
         col.add({ id: '1', idxs: '1', a: 'A1', b: 'B1' }),
         col.add({ id: '2', idxs: '2', a: 'A2', b: 'B2' }),
         col.add({ id: '3', idxs: '2', a: 'A3', b: 'B3' }),
@@ -224,7 +238,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
     it('changes only matching entries', async () => {
       await col.update('id', '2', { b: 'updated' });
-      const [v1, v2, v3] = await Promise.all([
+      const [v1, v2, v3] = await runAll([
         col.get('id', '1'),
         col.get('id', '2'),
         col.get('id', '3'),
@@ -285,7 +299,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
     it('changes exactly one matching entry', async () => {
       await col.update('idxs', '2', { b: 'updated' });
-      const [v2, v3] = await Promise.all([
+      const [v2, v3] = await runAll([
         col.get('id', '2'),
         col.get('id', '3'),
       ]);
@@ -302,7 +316,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
     it('does nothing if no value matches', async () => {
       await col.update('idxs', '10', { b: 'updated' });
-      const [v1, v2, v3] = await Promise.all([
+      const [v1, v2, v3] = await runAll([
         col.get('id', '1'),
         col.get('id', '2'),
         col.get('id', '3'),
@@ -359,7 +373,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
     beforeEach(async () => {
       col = db.getCollection<TestType>('test-remove', { idxs: {} });
 
-      await Promise.all([
+      await runAll([
         col.add({ id: '1', idxs: '1' }),
         col.add({ id: '2', idxs: '2' }),
         col.add({ id: '3', idxs: '2' }),
@@ -402,6 +416,52 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
       const remaining = await col.getAll();
       expect(remaining.length).toEqual(3);
+    });
+  });
+
+  describe('single-threaded concurrency', () => {
+    const concurrency = 32;
+
+    describe('update', () => {
+      it('does not clobber other thread changes', async () => {
+        const c = db.getCollection<any>('test-update');
+        const expected: any = { id: '1' };
+        const tasks = [];
+        for (let i = 0; i < concurrency; i += 1) {
+          const attr = `v${i}`;
+          expected[attr] = 9;
+
+          tasks.push(async () => {
+            for (let n = 0; n < 10; n += 1) {
+              // eslint-disable-next-line no-await-in-loop
+              await c.update('id', '1', { [attr]: n });
+            }
+          });
+        }
+        await c.add({ id: '1' });
+
+        await runAll(tasks.map((t) => t()));
+
+        expect(await c.get('id', '1')).toEqual(expected);
+      });
+
+      it('allows the first entry to upsert', async () => {
+        const c = db.getCollection<any>('test-update');
+        const expected: any = { id: '1' };
+        const tasks = [];
+        for (let i = 0; i < concurrency; i += 1) {
+          const attr = `v${i}`;
+          expected[attr] = 1;
+
+          tasks.push(async () => {
+            await c.update('id', '1', { [attr]: 1 }, { upsert: true });
+          });
+        }
+
+        await runAll(tasks.map((t) => t()));
+
+        expect(await c.get('id', '1')).toEqual(expected);
+      });
     });
   });
 };

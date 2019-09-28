@@ -76,7 +76,11 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
     const sId = this.internalGetSerialisedIds(keyName, key)[0];
     if (sId === undefined) {
       if (upsert) {
-        await this.add(Object.assign({ [keyName]: key }, value as T));
+        const fullValue = Object.assign({ [keyName]: key }, value as T);
+        const serialised = serialiseRecord(fullValue);
+        this.internalCheckDuplicates(serialised, true);
+        this.data.set(serialised.id, serialised);
+        this.internalPopulateIndices(serialised);
       }
       return;
     }

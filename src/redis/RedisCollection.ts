@@ -1,4 +1,3 @@
-import { Redis } from 'ioredis';
 import IDable from '../interfaces/IDable';
 import Collection from '../interfaces/Collection';
 import { DBKeys } from '../interfaces/DB';
@@ -7,8 +6,9 @@ import {
   serialiseRecord,
   deserialiseRecord,
 } from '../helpers/serialiser';
-import { multiExec, ExtendedRedis } from './helpers';
-import defineAllScripts, { ScriptExtensions } from './scripts';
+import RedisConnectionPool from './RedisConnectionPool';
+import { multiExec } from './helpers';
+import { ERedis } from './scripts';
 
 interface Key<T> {
   key: keyof T & string;
@@ -42,9 +42,11 @@ function itemHasContent(item: Record<string, string | null>): boolean {
   return Object.values(item).some((v) => (v !== null));
 }
 
-export default class RedisCollection<T extends IDable> implements Collection<T> {
-  private readonly client: ExtendedRedis<ScriptExtensions>;
+async function unwatchAll(client: ERedis): Promise<void> {
+  await client.unwatch();
+}
 
+export default class RedisCollection<T extends IDable> implements Collection<T> {
   private readonly keyPrefixes: { [K in keyof T]?: string } = {};
 
   private readonly keys: Key<T>[] = [];
@@ -54,7 +56,7 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
   private readonly nonUniqueKeys: Key<T>[] = [];
 
   public constructor(
-    client: Redis,
+    private readonly pool: RedisConnectionPool,
     private readonly prefix: string,
     keys: DBKeys<T> = {},
   ) {
@@ -70,18 +72,19 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
         this.nonUniqueKeys.push(keyInfo);
       }
     });
-
-    this.client = defineAllScripts(client);
   }
 
-  public async add(value: T): Promise<void> {
-    const added = await this.internalAdd(serialiseRecord(value), false);
-    if (!added) {
-      throw new Error('duplicate');
-    }
+  public add(value: T): Promise<void> {
+    const serialised = serialiseRecord(value);
+    return this.pool.withConnection(async (client) => {
+      const added = await this.internalAdd(client, serialised, false);
+      if (!added) {
+        throw new Error('duplicate');
+      }
+    });
   }
 
-  public async update<K extends keyof T & string>(
+  public update<K extends keyof T & string>(
     keyName: K,
     key: T[K],
     value: Partial<T>,
@@ -93,8 +96,8 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
       throw new Error('Cannot upsert without ID');
     }
 
-    try {
-      const sId = (await this.getAndWatchBySerialisedKey(keyName, sKey))[0];
+    return this.pool.retryWithConnection(async (client) => {
+      const sId = (await this.getAndWatchBySerialisedKey(client, keyName, sKey))[0];
       if (sId) {
         if (id && id !== sId) {
           throw new Error('Cannot update id');
@@ -103,14 +106,16 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
         return;
       }
       const rKey = this.makeKey(sId || id);
-      await this.client.watch(rKey);
+      await client.watch(rKey);
       const oldSerialised = sId && await this.rawByKeyKeepWatches(
+        client,
         sId,
         this.keys.map((k) => k.key).filter((k) => patchSerialised[k]),
       );
       if (!oldSerialised) {
         if (upsert) {
           await this.internalAdd(
+            client,
             { id, [keyName]: sKey, ...patchSerialised },
             true,
           );
@@ -149,22 +154,20 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
         sId,
         ...diff,
       ];
-      const updated = await this.client
+      const updated = await client
         .multi()
         .update(keyCount, params)
         .exec();
       if (!updated) {
-        throw new Error('rollback');
+        throw new Error('transient error');
       }
       if (!updated[0][1]) {
         throw new Error('duplicate');
       }
-    } finally {
-      await this.client.unwatch();
-    }
+    }, unwatchAll);
   }
 
-  public async get<
+  public get<
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
@@ -173,19 +176,17 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
     const sKey = serialiseValue(key);
-    try {
-      const sId = (await this.getAndWatchBySerialisedKey(keyName, sKey))[0];
+    return this.pool.retryWithConnection(async (client) => {
+      const sId = (await this.getAndWatchBySerialisedKey(client, keyName, sKey))[0];
       if (sId === undefined) {
         return null;
       }
-      const results = await this.getByKeysKeepWatches([sId], fields);
+      const results = await this.getByKeysKeepWatches(client, [sId], fields);
       return results[0] || null;
-    } finally {
-      await this.client.unwatch();
-    }
+    }, unwatchAll);
   }
 
-  public async getAll<
+  public getAll<
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
@@ -193,23 +194,21 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     key?: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
-    try {
+    return this.pool.retryWithConnection(async (client) => {
       let sIds: string[];
       if (keyName) {
         const sKey = serialiseValue(key);
-        sIds = await this.getAndWatchBySerialisedKey(keyName, sKey);
+        sIds = await this.getAndWatchBySerialisedKey(client, keyName, sKey);
       } else {
-        sIds = await this.client.keys(this.makeKey('*'));
+        sIds = await client.keys(this.makeKey('*'));
         const cut = this.prefix.length + 1;
         sIds = sIds.map((v) => v.substr(cut));
       }
-      return await this.getByKeysKeepWatches(sIds, fields);
-    } finally {
-      await this.client.unwatch();
-    }
+      return this.getByKeysKeepWatches(client, sIds, fields);
+    }, unwatchAll);
   }
 
-  public async remove<K extends keyof T & string>(
+  public remove<K extends keyof T & string>(
     key: K,
     value: T[K],
   ): Promise<number> {
@@ -217,17 +216,17 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     const indexedKeys = this.keys.map((k) => k.key);
     indexedKeys.push('id');
 
-    try {
-      const sIds = await this.getAndWatchBySerialisedKey(key, sKey);
+    return this.pool.retryWithConnection(async (client) => {
+      const sIds = await this.getAndWatchBySerialisedKey(client, key, sKey);
       const items = (await Promise.all(
-        sIds.map((sId) => this.rawByKeyKeepWatches(sId, indexedKeys)),
+        sIds.map((sId) => this.rawByKeyKeepWatches(client, sId, indexedKeys)),
       )).filter(<T>(item?: T): item is T => (item !== undefined));
 
       if (items.length === 0) {
         return 0;
       }
 
-      const pipeline = this.client.multi();
+      const pipeline = client.multi();
       items.forEach((item) => {
         const keys = makeIndexKeys(this.keys, item);
         pipeline.remove(
@@ -239,9 +238,7 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
       });
       await pipeline.exec();
       return items.length;
-    } finally {
-      await this.client.unwatch();
-    }
+    }, unwatchAll);
   }
 
   private makeKey(serialisedId: string): string {
@@ -249,6 +246,7 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
   }
 
   private async internalAdd(
+    client: ERedis,
     { id, ...serialised }: Record<string, string>,
     checkWatch: boolean,
   ): Promise<boolean> {
@@ -267,31 +265,32 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     ];
 
     if (!checkWatch) {
-      return Boolean(await this.client.add(keyCount, ...params));
+      return Boolean(await client.add(keyCount, ...params));
     }
 
-    const result = await this.client
+    const result = await client
       .multi()
       .add(keyCount, ...params)
       .exec();
     if (!result) {
-      throw new Error('rollback');
+      throw new Error('transient error');
     }
     return Boolean(result[0][1]);
   }
 
   private async getByKeysKeepWatches<F extends readonly (keyof T & string)[]>(
+    client: ERedis,
     serialisedIds: string[],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
     const results = await multiExec(
-      this.client,
+      client,
       serialisedIds
         .map((sId) => this.makeKey(sId))
         .map((k) => (fields ? ['hmget', k, ...fields] : ['hgetall', k])),
     );
     if (!results) {
-      throw new Error('rollback');
+      throw new Error('transient error');
     }
     return results
       .map(([, item]: [unknown, any]) => parseItem(item, fields))
@@ -300,6 +299,7 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
   }
 
   private async rawByKeyKeepWatches(
+    client: ERedis,
     serialisedId: string,
     fields?: readonly (keyof T & string)[],
   ): Promise<Record<string, string | null> | undefined> {
@@ -308,18 +308,19 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     if (fields) {
       if (!fields.length) {
         // just check existence
-        const exists = await this.client.exists(key);
+        const exists = await client.exists(key);
         return exists ? {} : undefined;
       }
-      item = await this.client.hmget(key, ...fields);
+      item = await client.hmget(key, ...fields);
     } else {
-      item = await this.client.hgetall(key);
+      item = await client.hgetall(key);
     }
     const parsed = parseItem(item, fields);
     return itemHasContent(parsed) ? parsed : undefined;
   }
 
   private async getAndWatchBySerialisedKey(
+    client: ERedis,
     keyName: keyof T,
     serialisedValue: string,
   ): Promise<string[]> {
@@ -331,7 +332,7 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
       throw new Error(`Requested key ${keyName} not indexed`);
     }
     const keyAddress = `${keyPrefix}:${serialisedValue}`;
-    await this.client.watch(keyAddress);
-    return this.client.smembers(keyAddress);
+    await client.watch(keyAddress);
+    return client.smembers(keyAddress);
   }
 }
