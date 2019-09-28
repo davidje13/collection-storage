@@ -9,7 +9,7 @@ Currently supports MongoDB, Redis (experimental), and in-memory storage.
 ## Install dependency
 
 ```bash
-npm install --save git+https://github.com/davidje13/collection-storage.git#semver:^1.5.1
+npm install --save git+https://github.com/davidje13/collection-storage.git#semver:^1.5.2
 ```
 
 If you want to connect to a Mongo database, you will also need to add a
