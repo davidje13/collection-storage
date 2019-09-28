@@ -27,9 +27,7 @@ npm install --save ioredis
 ```
 
 **warning**: Redis support is experimental and the database format is likely
-to change in later versions. Atomicity of operations is not guaranteed when
-using Redis, so uniqueness constraints may be violated, and index lookups may
-return inconsistent results.
+to change in later versions.
 
 ## Usage
 

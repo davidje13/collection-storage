@@ -1,7 +1,11 @@
 import Collection, { KeyOptions } from '../interfaces/Collection';
 import IDable from '../interfaces/IDable';
 import { DBKeys } from '../interfaces/DB';
-import { serialiseValue, deserialiseValue } from '../helpers/serialiser';
+import {
+  serialiseValue,
+  serialiseRecord,
+  deserialiseRecord,
+} from '../helpers/serialiser';
 
 function sleep(millis: number): Promise<void> | null {
   if (!millis) {
@@ -29,26 +33,6 @@ function applyFilter<T, F extends readonly (keyof T)[]>(
 interface KeyInfo {
   map: Map<string, Set<string>>;
   options: KeyOptions;
-}
-
-function serialiseRecord<T>(
-  record: T,
-): Record<string, string> {
-  const result: Record<string, string> = {};
-  Object.keys(record).forEach((k) => {
-    result[k] = serialiseValue((record as any)[k]);
-  });
-  return result;
-}
-
-function deserialiseRecord(
-  record: Record<string, string>,
-): Record<string, unknown> {
-  const result: Record<string, any> = {};
-  Object.keys(record).forEach((k) => {
-    result[k] = deserialiseValue(record[k]);
-  });
-  return result;
 }
 
 export default class MemoryCollection<T extends IDable> implements Collection<T> {

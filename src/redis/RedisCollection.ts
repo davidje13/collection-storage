@@ -2,42 +2,59 @@ import { Redis } from 'ioredis';
 import IDable from '../interfaces/IDable';
 import Collection from '../interfaces/Collection';
 import { DBKeys } from '../interfaces/DB';
-import { serialiseValue, deserialiseValue } from '../helpers/serialiser';
+import {
+  serialiseValue,
+  serialiseRecord,
+  deserialiseRecord,
+} from '../helpers/serialiser';
+import { multiExec, ExtendedRedis } from './helpers';
+import defineAllScripts, { ScriptExtensions } from './scripts';
 
-function serialiseRecord<T>(
-  record: T,
-): Record<string, string> {
-  const result: Record<string, string> = {};
-  Object.keys(record).forEach((k) => {
-    result[k] = serialiseValue((record as any)[k]);
-  });
-  return result;
-}
-
-function deserialiseRecord(
-  record: Record<string, string>,
-): Record<string, unknown> {
-  const result: Record<string, any> = {};
-  Object.keys(record).forEach((k) => {
-    result[k] = deserialiseValue(record[k]);
-  });
-  return result;
-}
-
-interface Key {
-  key: string;
+interface Key<T> {
+  key: keyof T & string;
   prefix: string;
 }
 
+function makeIndexKeys(
+  keys: Key<any>[],
+  partialSerialisedValue: Record<string, string | null>,
+): string[] {
+  return keys
+    .filter(({ key }) => partialSerialisedValue[key])
+    .map(({ key, prefix }) => `${prefix}:${partialSerialisedValue[key]}`);
+}
+
+function parseItem(
+  item: (string | null)[] | Record<string, string | null>,
+  fields?: readonly string[],
+): Record<string, string | null> {
+  if (!fields) {
+    return item as any;
+  }
+  const result: Record<string, string | null> = {};
+  for (let f = 0; f < fields.length; f += 1) {
+    result[fields[f]] = (item as any)[f];
+  }
+  return result;
+}
+
+function itemHasContent(item: Record<string, string | null>): boolean {
+  return Object.values(item).some((v) => (v !== null));
+}
+
 export default class RedisCollection<T extends IDable> implements Collection<T> {
+  private readonly client: ExtendedRedis<ScriptExtensions>;
+
   private readonly keyPrefixes: { [K in keyof T]?: string } = {};
 
-  private readonly keys: Key[] = [];
+  private readonly keys: Key<T>[] = [];
 
-  private readonly uniqueKeys: Key[] = [];
+  private readonly uniqueKeys: Key<T>[] = [];
+
+  private readonly nonUniqueKeys: Key<T>[] = [];
 
   public constructor(
-    private readonly client: Redis,
+    client: Redis,
     private readonly prefix: string,
     keys: DBKeys<T> = {},
   ) {
@@ -49,20 +66,19 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
       this.keys.push(keyInfo);
       if (keys[key]!.unique) {
         this.uniqueKeys.push(keyInfo);
+      } else {
+        this.nonUniqueKeys.push(keyInfo);
       }
     });
+
+    this.client = defineAllScripts(client);
   }
 
   public async add(value: T): Promise<void> {
-    const serialised = serialiseRecord(value);
-    if (await this.client.exists(this.makeKey(serialised.id))) {
+    const added = await this.internalAdd(serialiseRecord(value), false);
+    if (!added) {
       throw new Error('duplicate');
     }
-    await this.internalCheckKeyDuplicates(serialised.id, serialised);
-    await this.runMulti([
-      this.setByKey(serialised.id, serialised),
-      ...this.internalMigrateIndices(serialised.id, {}, serialised),
-    ]);
   }
 
   public async update<K extends keyof T & string>(
@@ -71,27 +87,81 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     value: Partial<T>,
     { upsert = false } = {},
   ): Promise<void> {
-    if (upsert && keyName !== 'id' && value.id === undefined) {
+    const { id, ...patchSerialised } = serialiseRecord(value);
+    const sKey = serialiseValue(key);
+    if (upsert && keyName !== 'id' && !id) {
       throw new Error('Cannot upsert without ID');
     }
 
-    const patchSerialised = serialiseRecord(value);
-    const sId = (await this.internalGetPossibleSerialisedIds(keyName, key))[0];
-    if (sId && patchSerialised.id && patchSerialised.id !== sId) {
-      throw new Error('Cannot update id');
-    }
-    const oldSerialised = await this.readByKey(sId, Object.keys(value) as any[]);
-    if (!oldSerialised) {
-      if (upsert) {
-        await this.add(Object.assign({ [keyName]: key }, value as T));
+    try {
+      const sId = (await this.getAndWatchBySerialisedKey(keyName, sKey))[0];
+      if (sId) {
+        if (id && id !== sId) {
+          throw new Error('Cannot update id');
+        }
+      } else if (!upsert) {
+        return;
       }
-      return;
+      const rKey = this.makeKey(sId || id);
+      await this.client.watch(rKey);
+      const oldSerialised = sId && await this.rawByKeyKeepWatches(
+        sId,
+        this.keys.map((k) => k.key).filter((k) => patchSerialised[k]),
+      );
+      if (!oldSerialised) {
+        if (upsert) {
+          await this.internalAdd(
+            { id, [keyName]: sKey, ...patchSerialised },
+            true,
+          );
+        }
+        return;
+      }
+      Object.keys(patchSerialised).forEach((k) => {
+        if (oldSerialised[k] === patchSerialised[k]) {
+          delete patchSerialised[k];
+          delete oldSerialised[k];
+        }
+      });
+      const diff = Object.entries(patchSerialised).flat();
+      if (!diff.length) {
+        return; // nothing changed
+      }
+      const patchUniqueKeys = makeIndexKeys(this.uniqueKeys, patchSerialised);
+      const patchNonUniqueKeys = makeIndexKeys(this.nonUniqueKeys, patchSerialised);
+      const oldUniqueKeys = makeIndexKeys(this.uniqueKeys, oldSerialised);
+      const oldNonUniqueKeys = makeIndexKeys(this.nonUniqueKeys, oldSerialised);
+      if (
+        oldUniqueKeys.length !== patchUniqueKeys.length ||
+        oldNonUniqueKeys.length !== patchNonUniqueKeys.length
+      ) {
+        throw new Error('unexpected key mismatch with old value');
+      }
+      const keyCount = 1 + (patchUniqueKeys.length + patchNonUniqueKeys.length) * 2;
+      const params = [
+        rKey,
+        ...patchUniqueKeys,
+        ...patchNonUniqueKeys,
+        ...oldUniqueKeys,
+        ...oldNonUniqueKeys,
+        patchUniqueKeys.length,
+        patchUniqueKeys.length + patchNonUniqueKeys.length,
+        sId,
+        ...diff,
+      ];
+      const updated = await this.client
+        .multi()
+        .update(keyCount, params)
+        .exec();
+      if (!updated) {
+        throw new Error('rollback');
+      }
+      if (!updated[0][1]) {
+        throw new Error('duplicate');
+      }
+    } finally {
+      await this.client.unwatch();
     }
-    await this.internalCheckKeyDuplicates(sId, patchSerialised);
-    await this.runMulti([
-      this.setByKey(sId, patchSerialised),
-      ...this.internalMigrateIndices(sId, oldSerialised, patchSerialised),
-    ]);
   }
 
   public async get<
@@ -102,12 +172,17 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     key: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
-    const sId = (await this.internalGetPossibleSerialisedIds(keyName, key))[0];
-    const value = await this.readByKey(sId, fields);
-    if (!value) {
-      return null;
+    const sKey = serialiseValue(key);
+    try {
+      const sId = (await this.getAndWatchBySerialisedKey(keyName, sKey))[0];
+      if (sId === undefined) {
+        return null;
+      }
+      const results = await this.getByKeysKeepWatches([sId], fields);
+      return results[0] || null;
+    } finally {
+      await this.client.unwatch();
     }
-    return deserialiseRecord(value) as T;
   }
 
   public async getAll<
@@ -118,162 +193,145 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     key?: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
-    let sIds: string[];
-    if (keyName) {
-      sIds = await this.internalGetPossibleSerialisedIds(keyName, key!);
-    } else {
-      sIds = await this.client.keys(this.makeKey('*'));
-      const cut = this.prefix.length + 1;
-      sIds = sIds.map((v) => v.substr(cut));
+    try {
+      let sIds: string[];
+      if (keyName) {
+        const sKey = serialiseValue(key);
+        sIds = await this.getAndWatchBySerialisedKey(keyName, sKey);
+      } else {
+        sIds = await this.client.keys(this.makeKey('*'));
+        const cut = this.prefix.length + 1;
+        sIds = sIds.map((v) => v.substr(cut));
+      }
+      return await this.getByKeysKeepWatches(sIds, fields);
+    } finally {
+      await this.client.unwatch();
     }
-    const items = await this.readByKeys(sIds, fields);
-    return items.map(deserialiseRecord) as T[];
   }
 
   public async remove<K extends keyof T & string>(
     key: K,
     value: T[K],
   ): Promise<number> {
-    const indexedKeys = Object.keys(this.keyPrefixes) as any[];
+    const sKey = serialiseValue(value);
+    const indexedKeys = this.keys.map((k) => k.key);
     indexedKeys.push('id');
 
-    const sIds = await this.internalGetPossibleSerialisedIds(key, value);
-    const items = await this.readByKeys(sIds, indexedKeys);
-    if (items.length === 0) {
-      return 0;
-    }
+    try {
+      const sIds = await this.getAndWatchBySerialisedKey(key, sKey);
+      const items = (await Promise.all(
+        sIds.map((sId) => this.rawByKeyKeepWatches(sId, indexedKeys)),
+      )).filter(<T>(item?: T): item is T => (item !== undefined));
 
-    await this.runMulti([
-      ['del', ...items.map((item) => this.makeKey(item.id))],
-      ...items.flatMap((item) => this.internalMigrateIndices(item.id, item, {})),
-    ]);
-    return items.length;
+      if (items.length === 0) {
+        return 0;
+      }
+
+      const pipeline = this.client.multi();
+      items.forEach((item) => {
+        const keys = makeIndexKeys(this.keys, item);
+        pipeline.remove(
+          1 + keys.length,
+          this.makeKey(item.id!),
+          ...keys,
+          item.id!,
+        );
+      });
+      await pipeline.exec();
+      return items.length;
+    } finally {
+      await this.client.unwatch();
+    }
   }
 
   private makeKey(serialisedId: string): string {
     return `${this.prefix}:${serialisedId}`;
   }
 
-  private setByKey(
-    serialisedId: string,
-    serialised: Record<string, string>,
-  ): string[] {
-    return [
-      'hmset',
-      this.makeKey(serialisedId),
+  private async internalAdd(
+    { id, ...serialised }: Record<string, string>,
+    checkWatch: boolean,
+  ): Promise<boolean> {
+    const uniqueKeys = makeIndexKeys(this.uniqueKeys, serialised);
+    const nonUniqueKeys = makeIndexKeys(this.nonUniqueKeys, serialised);
+
+    const keyCount = 1 + uniqueKeys.length + nonUniqueKeys.length;
+    const params = [
+      this.makeKey(id),
+      ...uniqueKeys,
+      ...nonUniqueKeys,
+      uniqueKeys.length,
+      'id', // ID is always first in flattened key/value pairs
+      id,
       ...Object.entries(serialised).flat(),
     ];
-  }
 
-  private getByKey<F extends readonly (keyof T & string)[]>(
-    serialisedId: string,
-    fields?: F,
-  ): string[] {
-    const key = this.makeKey(serialisedId);
-    if (!fields) {
-      return ['hgetall', key];
+    if (!checkWatch) {
+      return Boolean(await this.client.add(keyCount, ...params));
     }
-    return ['hmget', key, ...fields];
-  }
 
-  private async readByKey<F extends readonly (keyof T & string)[]>(
-    serialisedId?: string,
-    fields?: F,
-  ): Promise<Record<string, string> | undefined> {
-    if (serialisedId === undefined) {
-      return undefined;
+    const result = await this.client
+      .multi()
+      .add(keyCount, ...params)
+      .exec();
+    if (!result) {
+      throw new Error('rollback');
     }
-    const items = await this.readByKeys([serialisedId], fields);
-    return items[0];
+    return Boolean(result[0][1]);
   }
 
-  private async readByKeys<F extends readonly (keyof T & string)[]>(
+  private async getByKeysKeepWatches<F extends readonly (keyof T & string)[]>(
     serialisedIds: string[],
     fields?: F,
-  ): Promise<Record<string, string>[]> {
-    const results = await this.runMulti(serialisedIds.map((sId) => this.getByKey(sId, fields)));
-    let items;
-    if (fields) {
-      items = results.map(([, item]) => {
-        const result: any = {};
-        for (let f = 0; f < fields.length; f += 1) {
-          result[fields[f]] = item[f];
-        }
-        return result;
-      });
-    } else {
-      items = results.map(([, item]) => item);
+  ): Promise<Readonly<Pick<T, F[-1]>>[]> {
+    const results = await multiExec(
+      this.client,
+      serialisedIds
+        .map((sId) => this.makeKey(sId))
+        .map((k) => (fields ? ['hmget', k, ...fields] : ['hgetall', k])),
+    );
+    if (!results) {
+      throw new Error('rollback');
     }
-    return items.filter((item) => Object.values(item).some((v) => (v !== null)));
+    return results
+      .map(([, item]: [unknown, any]) => parseItem(item, fields))
+      .filter(itemHasContent)
+      .map(deserialiseRecord) as T[];
   }
 
-  private async internalGetPossibleSerialisedIds<K extends keyof T>(
-    keyName: K,
-    key: T[K],
+  private async rawByKeyKeepWatches(
+    serialisedId: string,
+    fields?: readonly (keyof T & string)[],
+  ): Promise<Record<string, string | null> | undefined> {
+    const key = this.makeKey(serialisedId);
+    let item;
+    if (fields) {
+      if (!fields.length) {
+        // just check existence
+        const exists = await this.client.exists(key);
+        return exists ? {} : undefined;
+      }
+      item = await this.client.hmget(key, ...fields);
+    } else {
+      item = await this.client.hgetall(key);
+    }
+    const parsed = parseItem(item, fields);
+    return itemHasContent(parsed) ? parsed : undefined;
+  }
+
+  private async getAndWatchBySerialisedKey(
+    keyName: keyof T,
+    serialisedValue: string,
   ): Promise<string[]> {
-    const sKey = serialiseValue(key);
     if (keyName === 'id') {
-      return [sKey];
+      return [serialisedValue];
     }
     const keyPrefix = this.keyPrefixes[keyName];
     if (!keyPrefix) {
       throw new Error(`Requested key ${keyName} not indexed`);
     }
-    return this.client.smembers(`${keyPrefix}:${sKey}`);
-  }
-
-  private async internalCheckKeyDuplicates(
-    serialisedId: string,
-    partialSerialisedValue: Record<string, string>,
-  ): Promise<void> {
-    const records = await this.runMulti(
-      this.uniqueKeys
-        .filter(({ key }) => partialSerialisedValue[key])
-        .map(({ key, prefix }) => (['smembers', `${prefix}:${partialSerialisedValue[key]}`])),
-    );
-    if (records.some(([, r]) => (r.length > 0 && r[0] !== serialisedId))) {
-      throw new Error('duplicate');
-    }
-  }
-
-  private internalMigrateIndices(
-    serialisedId: string,
-    partialOldSerialisedValue: Record<string, string>,
-    partialNewSerialisedValue: Record<string, string>,
-  ): (string[] | null)[] {
-    return this.keys.map(({ key, prefix }) => {
-      if (!partialNewSerialisedValue[key]) {
-        if (!partialOldSerialisedValue[key]) {
-          return null;
-        }
-        return [
-          'srem',
-          `${prefix}:${partialOldSerialisedValue[key]}`,
-          serialisedId,
-        ];
-      }
-      if (!partialOldSerialisedValue[key]) {
-        return [
-          'sadd',
-          `${prefix}:${partialNewSerialisedValue[key]}`,
-          serialisedId,
-        ];
-      }
-      return [
-        'smove',
-        `${prefix}:${partialOldSerialisedValue[key]}`,
-        `${prefix}:${partialNewSerialisedValue[key]}`,
-        serialisedId,
-      ];
-    });
-  }
-
-  // returned values are [error, result] for each command
-  private async runMulti(commands: (string[] | null)[]): Promise<[unknown, any][]> {
-    const filtered = commands.filter(<T>(c: T | null): c is T => (c !== null));
-    if (!filtered.length) {
-      return [];
-    }
-    return this.client.multi(filtered).exec();
+    const keyAddress = `${keyPrefix}:${serialisedValue}`;
+    await this.client.watch(keyAddress);
+    return this.client.smembers(keyAddress);
   }
 }
