@@ -13,6 +13,10 @@ const ID = 'id';
 
 type MongoT<T extends Partial<IDable>> = Omit<T, 'id'> & { _id?: T['id'] };
 
+interface State {
+  closed: boolean;
+}
+
 function fieldNameToMongo(name: string): string {
   if (name === ID) {
     return MONGO_ID;
@@ -88,6 +92,7 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
   public constructor(
     private readonly collection: MCollection,
     keys: DBKeys<T> = {},
+    private readonly stateRef: State = { closed: false },
   ) {
     Object.keys(keys).forEach((k) => {
       const keyName = k as keyof DBKeys<T>;
@@ -101,7 +106,7 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
   }
 
   public async add(value: T): Promise<void> {
-    await this.collection.insertOne(convertToMongo(value));
+    await this.getCollection().insertOne(convertToMongo(value));
   }
 
   public async update<K extends keyof T & string>(
@@ -116,13 +121,13 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
 
     if (upsert) {
       // special handling due to https://jira.mongodb.org/browse/SERVER-14322
-      await withUpsertRetry(() => this.collection.updateOne(
+      await withUpsertRetry(() => this.getCollection().updateOne(
         convertToMongo({ [keyName]: key }),
         { $set: convertToMongo(value) },
         { upsert: true },
       ));
     } else {
-      await this.collection.updateOne(
+      await this.getCollection().updateOne(
         convertToMongo({ [keyName]: key }),
         { $set: convertToMongo(value) },
       );
@@ -137,7 +142,7 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     key: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
-    const raw = await this.collection.findOne<T>(
+    const raw = await this.getCollection().findOne<T>(
       convertToMongo({ [keyName]: key }),
       { projection: makeMongoFields(fields) },
     );
@@ -157,12 +162,12 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     let cursor: MCursor<T>;
     const mFields = makeMongoFields(fields);
     if (keyName) {
-      cursor = this.collection.find<T>(
+      cursor = this.getCollection().find<T>(
         convertToMongo({ [keyName]: key }),
         { projection: mFields },
       );
     } else {
-      cursor = this.collection.find<T>({}, { projection: mFields });
+      cursor = this.getCollection().find<T>({}, { projection: mFields });
     }
     await cursor.forEach((raw) => result.push(convertFromMongo<T>(raw)!));
 
@@ -173,9 +178,16 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     key: K,
     value: T[K],
   ): Promise<number> {
-    const result = await this.collection.deleteMany(
+    const result = await this.getCollection().deleteMany(
       convertToMongo({ [key]: value }),
     );
     return result.deletedCount || 0;
+  }
+
+  private getCollection(): MCollection {
+    if (this.stateRef.closed) {
+      throw new Error('Connection closed');
+    }
+    return this.collection;
   }
 }

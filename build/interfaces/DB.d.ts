@@ -5,4 +5,5 @@ export declare type DBKeys<T> = {
 };
 export default interface DB {
     getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): Collection<T>;
+    close(): Promise<void> | void;
 }

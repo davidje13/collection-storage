@@ -23,6 +23,8 @@ export default class MemoryDb implements DB {
 
   private readonly mapTables = new Map<string, MemoryCollection<any>>();
 
+  private readonly stateRef = { closed: false };
+
   public constructor({ simulatedLatency = 0 } = {}) {
     this.simulatedLatency = simulatedLatency;
   }
@@ -50,8 +52,13 @@ export default class MemoryDb implements DB {
       this.mapTables.set(name, new MemoryCollection(
         keys,
         this.simulatedLatency,
+        this.stateRef,
       ));
     }
     return this.mapTables.get(name)! as MemoryCollection<T>;
+  }
+
+  public close(): void {
+    this.stateRef.closed = true;
   }
 }

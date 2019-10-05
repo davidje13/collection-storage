@@ -16,6 +16,10 @@ export default class RedisConnectionPool {
 
   private queue: ((client: ERedis) => void)[] = [];
 
+  private closingFn?: () => void;
+
+  private closed = false;
+
   public constructor(
     private readonly RedisStatic: RS,
     private readonly url: string,
@@ -45,7 +49,35 @@ export default class RedisConnectionPool {
     return withRetry(() => this.withConnection(fn, teardown));
   }
 
+  public close(): Promise<void> {
+    if (this.closed) {
+      return Promise.resolve();
+    }
+
+    this.closed = true;
+    if (this.inUse === 0) {
+      this.doClose();
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve): void => {
+      this.closingFn = (): void => {
+        this.doClose();
+        resolve();
+      };
+    });
+  }
+
+  private doClose(): void {
+    this.connections.forEach((c) => c.disconnect());
+    this.connections.length = 0;
+  }
+
   private async getConnection(): Promise<ERedis> {
+    if (this.closed) {
+      throw new Error('Connection closed');
+    }
+
     const r = this.connections.pop();
     if (r) {
       this.inUse += 1;
@@ -69,6 +101,9 @@ export default class RedisConnectionPool {
     } else {
       this.inUse -= 1;
       this.connections.push(c);
+      if (this.closingFn && this.inUse === 0) {
+        this.closingFn();
+      }
     }
   }
 }

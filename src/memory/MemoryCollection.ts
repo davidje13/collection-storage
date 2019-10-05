@@ -35,6 +35,10 @@ interface KeyInfo {
   options: KeyOptions;
 }
 
+interface State {
+  closed: boolean;
+}
+
 export default class MemoryCollection<T extends IDable> implements Collection<T> {
   private readonly data: Map<string, Record<string, string>>;
 
@@ -43,6 +47,7 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
   public constructor(
     keys: DBKeys<T> = {},
     private readonly simulatedLatency = 0,
+    private readonly stateRef: State = { closed: false },
   ) {
     this.data = new Map();
 
@@ -53,7 +58,7 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
   }
 
   public async add(value: T): Promise<void> {
-    await sleep(this.simulatedLatency);
+    await this.simulateDbConnection();
 
     const serialised = serialiseRecord(value);
     this.internalCheckDuplicates(serialised, true);
@@ -71,7 +76,7 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
       throw new Error('Cannot upsert without ID');
     }
 
-    await sleep(this.simulatedLatency);
+    await this.simulateDbConnection();
 
     const sId = this.internalGetSerialisedIds(keyName, key)[0];
     if (sId === undefined) {
@@ -125,7 +130,7 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
     key?: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
-    await sleep(this.simulatedLatency);
+    await this.simulateDbConnection();
 
     let sIds: string[];
     if (keyName) {
@@ -143,7 +148,7 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
     key: K,
     value: T[K],
   ): Promise<number> {
-    await sleep(this.simulatedLatency);
+    await this.simulateDbConnection();
 
     const sIds = this.internalGetSerialisedIds(key, value);
     sIds.forEach((sId) => {
@@ -153,6 +158,13 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
     });
 
     return sIds.length;
+  }
+
+  private async simulateDbConnection(): Promise<void> {
+    if (this.stateRef.closed) {
+      throw new Error('Connection closed');
+    }
+    await sleep(this.simulatedLatency);
   }
 
   private internalGetSerialisedIds<K extends keyof T>(

@@ -26,6 +26,10 @@ export default class RedisDb implements DB {
     return new RedisCollection(this.pool, name, keys);
   }
 
+  public close(): Promise<void> {
+    return this.pool.close();
+  }
+
   public getConnectionPool(): RedisConnectionPool {
     return this.pool;
   }

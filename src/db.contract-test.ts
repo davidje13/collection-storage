@@ -32,6 +32,10 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
     db = await factory();
   });
 
+  afterEach(async () => {
+    await db.close();
+  });
+
   it('stores and retrieves data', async () => {
     col = db.getCollection('test-simple');
 
@@ -83,6 +87,20 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
     expect(retrieved.length).toEqual(2);
     const retrievedIds = retrieved.map(({ id }) => id);
     expect(new Set(retrievedIds)).toEqual(new Set(['1', '2']));
+  });
+
+  it('rejects access after closing', async () => {
+    col = db.getCollection('test-simple');
+
+    await db.close();
+
+    let capturedError = null;
+    try {
+      await col.add({ id: '1', value: 'foo' });
+    } catch (e) {
+      capturedError = e;
+    }
+    expect(capturedError).not.toEqual(null);
   });
 
   describe('add', () => {

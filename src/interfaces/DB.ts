@@ -10,4 +10,6 @@ export default interface DB {
     name: string,
     keys?: DBKeys<T>,
   ): Collection<T>;
+
+  close(): Promise<void> | void;
 }

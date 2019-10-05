@@ -9,9 +9,13 @@ export default class RedisConnectionPool {
     private readonly connections;
     private inUse;
     private queue;
+    private closingFn?;
+    private closed;
     constructor(RedisStatic: RS, url: string, options: IORedis.RedisOptions, maxConnections: number);
     withConnection<T>(fn: (c: ERedis) => Promise<T> | T, teardown?: (c: ERedis) => Promise<void> | void): Promise<T>;
     retryWithConnection<T>(fn: (c: ERedis) => Promise<T> | T, teardown?: (c: ERedis) => Promise<void> | void): Promise<T>;
+    close(): Promise<void>;
+    private doClose;
     private getConnection;
     private returnConnection;
 }
