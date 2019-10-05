@@ -370,3 +370,10 @@ On Ubuntu, they can be installed with:
 ```bash
 apt install mongodb redis-server
 ```
+
+Or portably using Docker:
+
+```bash
+docker run -d mongo:4
+docker run -d redis:5-alpine
+```
