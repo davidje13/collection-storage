@@ -48,6 +48,41 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
     expect(retrieved === stored).toEqual(false);
   });
 
+  it('allows special characters in collection names', async () => {
+    const name = 'test-\\s\'p"e-c_i+a=l&c$h!a:r;a?c,t.e(r)s%h[e]r{e}\\';
+    col = db.getCollection(name);
+
+    const stored = { id: '1', value: 'foo' };
+    await col.add(stored);
+    const retrieved = await col.get('id', stored.id);
+
+    expect(retrieved).toEqual(stored);
+  });
+
+  it('allows special characters in attribute names', async () => {
+    const attribute = '\\s\'p"e-c_i+a=l&c$h!a:r;a?c,t.e(r)s%h[e]r{e}\\';
+    const specialCharCol = db.getCollection<any>('test-simple');
+
+    const stored = { id: '1', [attribute]: 'foo' };
+    await specialCharCol.add(stored);
+    const retrieved = await specialCharCol.get('id', stored.id);
+
+    expect(retrieved).toEqual(stored);
+  });
+
+  it('allows special characters in indices', async () => {
+    const attribute = '\\s\'p"e-c_i+a=l&c$h!a:r;a?c,t.e(r)s%h[e]r{e}\\';
+    const specialCharCol = db.getCollection<any>('test-simple', {
+      [attribute]: { unique: true },
+    });
+
+    const stored = { id: '1', [attribute]: 'foo' };
+    await specialCharCol.add(stored);
+    const retrieved = await specialCharCol.get(attribute, 'foo');
+
+    expect(retrieved).toEqual(stored);
+  });
+
   it('stores and retrieves JSON data', async () => {
     const stored = { id: '1', value: { nested: ['hi', { object: 3 }] } };
     const complexCol = db.getCollection<typeof stored>('test-json');

@@ -3,6 +3,10 @@ import MongoCollection from './MongoCollection';
 import DB, { DBKeys } from '../interfaces/DB';
 import IDable from '../interfaces/IDable';
 
+function escapeName(name: string): string {
+  return encodeURIComponent(name);
+}
+
 export default class MongoDb implements DB {
   private readonly stateRef = { closed: false };
 
@@ -23,7 +27,7 @@ export default class MongoDb implements DB {
     name: string,
     keys?: DBKeys<T>,
   ): MongoCollection<T> {
-    const collection = this.client.db().collection(name);
+    const collection = this.client.db().collection(escapeName(name));
     return new MongoCollection(collection, keys, this.stateRef);
   }
 
