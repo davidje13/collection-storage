@@ -7,6 +7,7 @@ interface State {
 }
 export default class MongoCollection<T extends IDable> implements Collection<T> {
     private readonly collection;
+    private readonly keys;
     private readonly stateRef;
     constructor(collection: MCollection, keys?: DBKeys<T>, stateRef?: State);
     add(value: T): Promise<void>;
@@ -16,6 +17,7 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     get<K extends keyof T & string, F extends readonly (keyof T & string)[]>(keyName: K, key: T[K], fields?: F): Promise<Readonly<Pick<T, F[-1]>> | null>;
     getAll<K extends keyof T & string, F extends readonly (keyof T & string)[]>(keyName?: K, key?: T[K], fields?: F): Promise<Readonly<Pick<T, F[-1]>>[]>;
     remove<K extends keyof T & string>(key: K, value: T[K]): Promise<number>;
+    private checkIndexExists;
     private getCollection;
 }
 export {};

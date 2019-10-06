@@ -197,6 +197,16 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
       expect(v!.id).toEqual('1');
     });
 
+    it('rejects filters using unindexed keys', async () => {
+      let capturedError = null;
+      try {
+        await col.get('b', 'B1');
+      } catch (e) {
+        capturedError = e;
+      }
+      expect(capturedError).not.toEqual(null);
+    });
+
     it('returns null if no values match', async () => {
       const v = await col.get('idx', 3);
       expect(v).toEqual(null);
@@ -262,6 +272,16 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
         { id: '2', idx: 2, a: 'A2', b: 'B2' },
         { id: '3', idx: 2, a: 'A3', b: 'B3' },
       ]));
+    });
+
+    it('rejects filters using unindexed keys', async () => {
+      let capturedError = null;
+      try {
+        await col.getAll('b', 'B1');
+      } catch (e) {
+        capturedError = e;
+      }
+      expect(capturedError).not.toEqual(null);
     });
 
     it('returns an empty list if no values match', async () => {
@@ -381,6 +401,16 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
       expect(all.length).toEqual(3);
     });
 
+    it('rejects filters using unindexed keys', async () => {
+      let capturedError = null;
+      try {
+        await col.update('b', 'B2', { a: 'updated' });
+      } catch (e) {
+        capturedError = e;
+      }
+      expect(capturedError).not.toEqual(null);
+    });
+
     describe('upsert', () => {
       it('adds a new record if no value matches using key ID', async () => {
         const data = { idxs: 'x', a: 'y', b: 'z' };
@@ -469,6 +499,16 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
       const remaining = await col.getAll();
       expect(remaining.length).toEqual(3);
+    });
+
+    it('rejects filters using unindexed keys', async () => {
+      let capturedError = null;
+      try {
+        await col.remove('b', 'B2');
+      } catch (e) {
+        capturedError = e;
+      }
+      expect(capturedError).not.toEqual(null);
     });
   });
 

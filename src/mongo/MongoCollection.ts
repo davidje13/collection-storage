@@ -84,7 +84,7 @@ function makeMongoFields(names?: readonly string[]): Record<string, boolean> {
 export default class MongoCollection<T extends IDable> implements Collection<T> {
   public constructor(
     private readonly collection: MCollection,
-    keys: DBKeys<T> = {},
+    private readonly keys: DBKeys<T> = {},
     private readonly stateRef: State = { closed: false },
   ) {
     Object.keys(keys).forEach((k) => {
@@ -113,6 +113,8 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
       throw new Error('Cannot upsert without ID');
     }
 
+    this.checkIndexExists(keyName);
+
     if (upsert) {
       // special handling due to https://jira.mongodb.org/browse/SERVER-14322
       await withUpsertRetry(() => this.getCollection().updateOne(
@@ -136,6 +138,8 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     key: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
+    this.checkIndexExists(keyName);
+
     const raw = await this.getCollection().findOne(
       convertToMongo({ [keyName]: key }),
       { projection: makeMongoFields(fields) },
@@ -156,6 +160,8 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     let cursor: MCursor;
     const mFields = makeMongoFields(fields);
     if (keyName) {
+      this.checkIndexExists(keyName);
+
       cursor = this.getCollection().find(
         convertToMongo({ [keyName]: key }),
         { projection: mFields },
@@ -172,10 +178,18 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     key: K,
     value: T[K],
   ): Promise<number> {
+    this.checkIndexExists(key);
+
     const result = await this.getCollection().deleteMany(
       convertToMongo({ [key]: value }),
     );
     return result.deletedCount || 0;
+  }
+
+  private checkIndexExists(key: string): void {
+    if (key !== 'id' && !(this.keys as any)[key]) {
+      throw new Error(`No index for ${key}`);
+    }
   }
 
   private getCollection(): MCollection {
