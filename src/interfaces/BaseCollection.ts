@@ -86,7 +86,12 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
         throw new Error(`Can only upsert by ID, not ${key}`);
       }
       await this.preAct();
-      return this.internalUpsert(value as T['id'], update, options);
+      let withoutId = update;
+      if (Object.prototype.hasOwnProperty.call(update, 'id')) {
+        withoutId = { ...update };
+        delete withoutId.id;
+      }
+      return this.internalUpsert(value as T['id'], withoutId, options);
     }
     if (!this.isIndexed(key)) {
       throw new Error(`No index for ${key}`);

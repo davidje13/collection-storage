@@ -4,7 +4,8 @@ Provides an abstraction layer around communication with a
 collection-based database. This makes switching database choices easier
 during deployments and testing.
 
-Currently supports MongoDB, Redis (experimental), and in-memory storage.
+Currently supports MongoDB, Redis (experimental), PostgreSQL, and in-memory
+storage.
 
 ## Install dependency
 
@@ -28,6 +29,16 @@ npm install --save ioredis
 
 **warning**: Redis support is experimental and the database format is likely
 to change in later versions.
+
+If you want to connect to a PostgreSQL database, you will also need to add a
+dependency on `pg`:
+
+```bash
+npm install --save pg
+```
+
+**note**: Though PostgreSQL is supported, it is not optimised for this type of
+data storage. If possible, use one of the NoSQL options instead.
 
 ## Usage
 
@@ -104,6 +115,17 @@ rediss://[username:password@]host[:port][/[database-index][?options]]
 
 See the [ioredis documentation](https://github.com/luin/ioredis#readme)
 for more details.
+
+### PostgreSQL
+
+```
+postgresql://[username:password@]host[:port]/database[?options]
+```
+
+Options can include `ssl=true`, `sslcert=<cert-file-path>`,
+`sslkey=<key-file-path>`, `sslrootcert=<root-file-path>`. For other options,
+see the config keys in the
+[pg Client constructor documentation](https://node-postgres.com/api/client/#constructor).
 
 ## Encryption
 
@@ -371,28 +393,35 @@ See example notes above for an example on using `customEncryption`.
 
 ## Development
 
-To run the test suite, you will need to have a local installation of
-MongoDB and Redis. By default, the tests will connect to
-`mongodb://localhost:27017/collection-storage-tests` and
-`redis://localhost:6379/15`. You can change this if required by setting the
-`MONGO_URL` and `REDIS_URL` environment variables.
+To run the test suite, you will need to have a local installation of MongoDB,
+Redis and PostgreSQL. By default, the tests will connect to
+`mongodb://localhost:27017/collection-storage-tests`,
+`redis://localhost:6379/15`, and
+`postgresql://localhost:5432/collection-storage-tests`. You can change this if
+required by setting the `MONGO_URL`, `REDIS_URL`, and `PSQL_URL` environment
+variables.
 
 **warning**: By default, this will flush any Redis database at index 15. If
 you have used database 15 for your own data, you should set `REDIS_URL` to
 use a different database index.
 
-On macOS, MongoDB and Redis can be installed with:
+**note**: The PostgreSQL tests will connect to the given server's `postgres`
+database to drop (if necessary) and re-create the specified test database.
+You do not need to create the test database yourself.
+
+On macOS: MongoDB, Redis and PostgreSQL can be installed with:
 
 ```bash
-brew install mongodb redis
+brew install mongodb redis postgresql
 brew services start mongodb
 brew services start redis
+brew services start postgresql
 ```
 
-On Ubuntu, they can be installed with:
+On Ubuntu: they can be installed with:
 
 ```bash
-apt install mongodb redis-server
+apt install mongodb redis-server postgresql-11
 ```
 
 Or portably using Docker:
@@ -400,4 +429,5 @@ Or portably using Docker:
 ```bash
 docker run -d mongo:4
 docker run -d redis:5-alpine
+docker run -d postgres:11-alpine
 ```

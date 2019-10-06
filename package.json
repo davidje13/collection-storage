@@ -34,7 +34,8 @@
   "homepage": "https://github.com/davidje13/collection-storage#readme",
   "dependencies": {
     "@types/ioredis": "^4.0.18",
-    "@types/mongodb": "^3.3.6"
+    "@types/mongodb": "^3.3.6",
+    "@types/pg": "^7.11.2"
   },
   "devDependencies": {
     "@neutrinojs/airbnb-base": "^9.0.0-rc.4",
@@ -49,6 +50,7 @@
     "neutrino": "^9.0.0-rc.4",
     "neutrino-typescript": "git+https://github.com/davidje13/neutrino-typescript#semver:^1.0.3",
     "neutrino-typescript-eslint": "git+https://github.com/davidje13/neutrino-typescript-eslint#semver:^1.0.1",
+    "pg": "^7.12.1",
     "typescript": "^3.6.3",
     "webpack": "^4.41.0",
     "webpack-cli": "^3.3.9"

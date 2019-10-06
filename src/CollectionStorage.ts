@@ -1,6 +1,7 @@
 import MemoryDb from './memory/MemoryDb';
 import MongoDb from './mongo/MongoDb';
 import RedisDb from './redis/RedisDb';
+import PostgresDb from './postgresql/PostgresDb';
 import DB from './interfaces/DB';
 
 export default class CollectionStorage {
@@ -12,6 +13,8 @@ export default class CollectionStorage {
       dbClass = MongoDb;
     } else if (url.startsWith('redis')) {
       dbClass = RedisDb;
+    } else if (url.startsWith('postgres')) {
+      dbClass = PostgresDb;
     } else {
       throw new Error(`Unsupported database connection string: ${url}`);
     }
