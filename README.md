@@ -232,6 +232,20 @@ const collection = await db.getCollection(name, {
 The `id` attribute is always indexed and should not be specified
 explicitly.
 
+#### `close`
+
+```javascript
+await db.close();
+```
+
+Disconnects from the database. Any in-progress operations will
+complete, but any new operations will fail with an exception.
+
+The database object cannot be reused after calling `close`.
+
+The returned promise will resolve once all in-progress operations
+have completed and all connections have fully closed.
+
 ### Collection
 
 #### `add`
