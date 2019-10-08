@@ -132,10 +132,10 @@ export default class WrappedCollection<
   ): Promise<Partial<Inner>> {
     let processed: E;
     if (this.wrapper.preWrap && hasAnyField(v, this.fields)) {
-      const allFields = extra ? Object.assign({}, extra, v) : v;
+      const allFields = extra ? { ...extra, ...v } : v;
       processed = await this.wrapper.preWrap(allFields);
     }
-    const converted = Object.assign({}, v) as any;
+    const converted = { ...v } as any;
     await Promise.all(this.fields.map(async (k) => {
       if (Object.prototype.hasOwnProperty.call(v, k)) {
         converted[k] = await this.wrapper.wrap(k, (v as any)[k], processed);
@@ -160,10 +160,10 @@ export default class WrappedCollection<
   ): Promise<Pick<T, K>> {
     let processed: E;
     if (this.wrapper.preUnwrap && hasAnyField(v, this.fields)) {
-      const allFields = extra ? Object.assign({}, extra, v) : v;
+      const allFields = extra ? { ...extra, ...v } : v;
       processed = await this.wrapper.preUnwrap(allFields as any);
     }
-    const converted = Object.assign({}, v) as any;
+    const converted = { ...v } as any;
     await Promise.all(this.fields.map(async (k) => {
       if (Object.prototype.hasOwnProperty.call(v, k)) {
         converted[k] = await this.wrapper.unwrap(k, (v as any)[k], processed);

@@ -221,7 +221,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
       await complexCol.add(stored);
 
-      const sameValue = Object.assign({}, value);
+      const sameValue = { ...value };
       const otherValue = { nested: ['nah', { object: 3 }] };
 
       expect((await complexCol.get('value', sameValue))!.id).toEqual('1');

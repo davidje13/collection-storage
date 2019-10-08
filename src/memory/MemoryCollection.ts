@@ -81,7 +81,7 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
     const sId = this.internalGetSerialisedIds(keyName, key)[0];
     if (sId === undefined) {
       if (upsert) {
-        const fullValue = Object.assign({ [keyName]: key }, value as T);
+        const fullValue = { [keyName]: key, ...value };
         const serialised = serialiseRecord(fullValue);
         this.internalCheckDuplicates(serialised, true);
         this.data.set(serialised.id, serialised);
@@ -91,7 +91,7 @@ export default class MemoryCollection<T extends IDable> implements Collection<T>
     }
     const oldSerialised = this.data.get(sId)!;
     const oldValue = deserialiseRecord(oldSerialised) as T;
-    const newValue = Object.assign({}, oldValue, value);
+    const newValue = { ...oldValue, ...value };
     if (newValue.id !== oldValue.id) {
       throw new Error('Cannot update id');
     }

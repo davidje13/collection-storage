@@ -72,7 +72,7 @@ function encryptByRecord<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
 
 function encryptByRecord<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
   keyCollection: Collection<KeyRecord<ID, SerialisedKeyT>>,
-  cacheSize: number = 0,
+  cacheSize = 0,
   cr: Encryption<EncT, KeyT, SerialisedKeyT> = nodeEncryptionSync as any,
 ): Encrypter<EncT, ID> {
   const cache = new LruCache<ID, KeyT>(cacheSize);
@@ -139,7 +139,7 @@ function encryptByRecordWithMasterKey<ID extends IDType, EncT, KeyT, SerialisedK
 function encryptByRecordWithMasterKey<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
   sMasterKey: SerialisedKeyT,
   keyCollection: Collection<KeyRecord<ID, EncT>>,
-  cacheSize: number = 0,
+  cacheSize = 0,
   cr: Encryption<EncT, KeyT, SerialisedKeyT> = nodeEncryptionSync as any,
 ): Encrypter<EncT, ID> {
   const keyEnc = encryptByKey(sMasterKey, cr);

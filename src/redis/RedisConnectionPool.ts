@@ -12,7 +12,7 @@ const withRetry = retry((e) => (
 export default class RedisConnectionPool {
   private readonly connections: ERedis[] = [];
 
-  private inUse: number = 0;
+  private inUse = 0;
 
   private queue: ((client: ERedis) => void)[] = [];
 
