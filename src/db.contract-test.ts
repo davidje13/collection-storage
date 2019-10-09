@@ -300,31 +300,12 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
       col = db.getCollection<TestType>('test-update', {
         idxs: {},
         a: { unique: true },
-        value: { unique: true },
       });
 
       await runAll([
-        col.add({
-          id: '1',
-          idxs: '1',
-          a: 'A1',
-          b: 'B1',
-          value: 'V1',
-        }),
-        col.add({
-          id: '2',
-          idxs: '2',
-          a: 'A2',
-          b: 'B2',
-          value: 'V2',
-        }),
-        col.add({
-          id: '3',
-          idxs: '2',
-          a: 'A3',
-          b: 'B3',
-          value: 'V3',
-        }),
+        col.add({ id: '1', idxs: '1', a: 'A1', b: 'B1' }),
+        col.add({ id: '2', idxs: '2', a: 'A2', b: 'B2' }),
+        col.add({ id: '3', idxs: '2', a: 'A3', b: 'B3' }),
       ]);
     });
 
@@ -440,46 +421,18 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
         expect(all.length).toEqual(3);
       });
 
-      it('updates existing records if found by unique index', async () => {
-        await col.update('a', 'A2', { id: '2', b: 'updated' }, { upsert: true });
-
-        const v = await col.get('id', '2');
-        expect(v!.b).toEqual('updated');
-        const all = await col.getAll();
-        expect(all.length).toEqual(3);
-      });
-
       it('adds a new record if no value matches using key ID', async () => {
-        const data = { idxs: 'x', a: 'y', b: 'z', value: 'x' };
+        const data = { idxs: 'x', a: 'y', b: 'z' };
         await col.update('id', '4', data, { upsert: true });
         const all = await col.getAll();
         expect(all.length).toEqual(4);
       });
 
-      it('adds a new record if no value matches using value ID', async () => {
-        const data = { id: '6', idxs: 'w', b: 'z', value: 'x' };
-        await col.update('a', 'x', data, { upsert: true });
-        const all = await col.getAll();
-        expect(all.length).toEqual(4);
-      });
-
-      it('rejects attempts to upsert using a non-unique index', async () => {
-        const data = { id: '6', a: 'y', b: 'z', value: 'x' };
+      it('rejects attempts to upsert using a non-ID index', async () => {
+        const data = { id: '6', idxs: 'w', a: 'y', b: 'z' };
         let capturedError = null;
         try {
-          await col.update('idxs', 'x', data, { upsert: true });
-        } catch (e) {
-          capturedError = e;
-        }
-        expect(capturedError).not.toEqual(null);
-        const all = await col.getAll();
-        expect(all.length).toEqual(3);
-      });
-
-      it('rejects upserting new records without IDs', async () => {
-        let capturedError = null;
-        try {
-          await col.update('a', 'x', { b: 'updated' }, { upsert: true });
+          await col.update('a', 'x', data, { upsert: true });
         } catch (e) {
           capturedError = e;
         }
@@ -491,7 +444,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
       it('rejects duplicates if no value matches', async () => {
         let capturedError = null;
         try {
-          await col.update('a', 'x', { value: 'V2' }, { upsert: true });
+          await col.update('id', '6', { a: 'A2' }, { upsert: true });
         } catch (e) {
           capturedError = e;
         }

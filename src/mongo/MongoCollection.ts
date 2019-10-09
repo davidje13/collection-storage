@@ -110,13 +110,7 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     { upsert = false } = {},
   ): Promise<void> {
     if (upsert && keyName !== 'id') {
-      if (value.id === undefined) {
-        throw new Error('Cannot upsert without ID');
-      }
-      const keyOptions = this.keys[keyName];
-      if (keyOptions && !keyOptions.unique) {
-        throw new Error(`Upsert key ${keyName} is not unique`);
-      }
+      throw new Error(`Can only upsert by ID, not ${keyName}`);
     }
 
     this.checkIndexExists(keyName);

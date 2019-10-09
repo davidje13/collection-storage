@@ -270,7 +270,7 @@ The `searchAttr` can be any indexed attribute (including `id`).
 
 If `options` is `{ upsert: true }` and no values match the search, a
 new entry will be added. If using `upsert` mode, the `searchAttr`
-must have a unique index (this includes `id`).
+must be `id`.
 
 #### `get`
 

@@ -90,16 +90,12 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     value: Partial<T>,
     { upsert = false } = {},
   ): Promise<void> {
+    if (upsert && keyName !== 'id') {
+      throw new Error(`Can only upsert by ID, not ${keyName}`);
+    }
+
     const { id, ...patchSerialised } = serialiseRecord(value);
     const sKey = serialiseValue(key);
-    if (upsert && keyName !== 'id') {
-      if (!id) {
-        throw new Error('Cannot upsert without ID');
-      }
-      if (!this.uniqueKeys.some((k) => (k.key === keyName))) {
-        throw new Error(`Upsert key ${keyName} is not unique`);
-      }
-    }
 
     return this.pool.retryWithConnection(async (client) => {
       const sId = (await this.getAndWatchBySerialisedKey(client, keyName, sKey))[0];
@@ -119,11 +115,14 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
       );
       if (!oldSerialised) {
         if (upsert) {
-          await this.internalAdd(
+          const success = await this.internalAdd(
             client,
             { id, [keyName]: sKey, ...patchSerialised },
             true,
           );
+          if (!success) {
+            throw new Error('duplicate');
+          }
         }
         return;
       }
