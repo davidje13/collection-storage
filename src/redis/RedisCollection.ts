@@ -92,8 +92,13 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
   ): Promise<void> {
     const { id, ...patchSerialised } = serialiseRecord(value);
     const sKey = serialiseValue(key);
-    if (upsert && keyName !== 'id' && !id) {
-      throw new Error('Cannot upsert without ID');
+    if (upsert && keyName !== 'id') {
+      if (!id) {
+        throw new Error('Cannot upsert without ID');
+      }
+      if (!this.uniqueKeys.some((k) => (k.key === keyName))) {
+        throw new Error(`Upsert key ${keyName} is not unique`);
+      }
     }
 
     return this.pool.retryWithConnection(async (client) => {

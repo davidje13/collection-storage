@@ -266,8 +266,11 @@ await collection.update(searchAttr, searchValue, update, [options]);
 Updates one entry which matches `searchAttr = searchValue`. Any
 attributes not specified in `update` will remain unchanged.
 
+The `searchAttr` can be any indexed attribute (including `id`).
+
 If `options` is `{ upsert: true }` and no values match the search, a
-new entry will be added.
+new entry will be added. If using `upsert` mode, the `searchAttr`
+must have a unique index (this includes `id`).
 
 #### `get`
 
@@ -278,6 +281,8 @@ const value = await collection.get(searchAttr, searchValue, [attrs]);
 Returns one entry which matches `searchAttr = searchValue`. If `attrs`
 is specified, only the attributes listed will be returned (by default,
 all attributes are returned).
+
+The `searchAttr` can be any indexed attribute (including `id`).
 
 `attrs` is an optional list of strings denoting the attributes to
 return.
@@ -300,6 +305,8 @@ const count = await collection.remove(searchAttr, searchValue);
 ```
 
 Removes all entries matching `searchAttr = searchValue`.
+
+The `searchAttr` can be any indexed attribute (including `id`).
 
 Returns the number of records removed (0 if no records matched).
 

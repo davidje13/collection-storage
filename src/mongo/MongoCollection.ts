@@ -109,8 +109,14 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     value: Partial<T>,
     { upsert = false } = {},
   ): Promise<void> {
-    if (upsert && keyName !== 'id' && value.id === undefined) {
-      throw new Error('Cannot upsert without ID');
+    if (upsert && keyName !== 'id') {
+      if (value.id === undefined) {
+        throw new Error('Cannot upsert without ID');
+      }
+      const keyOptions = this.keys[keyName];
+      if (keyOptions && !keyOptions.unique) {
+        throw new Error(`Upsert key ${keyName} is not unique`);
+      }
     }
 
     this.checkIndexExists(keyName);
