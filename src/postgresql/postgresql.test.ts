@@ -20,7 +20,7 @@ function quoteIdentifier(msg: string): string {
 }
 
 describe('PostgresDb', () => contract({
-  factory: async (): Promise<PostgresDb> => {
+  beforeAll: async (): Promise<void> => {
     const dbName = getDbName(url);
     const quotedDbName = quoteIdentifier(dbName);
 
@@ -34,7 +34,6 @@ describe('PostgresDb', () => contract({
     } finally {
       await root.end();
     }
-
-    return PostgresDb.connect(url);
   },
+  factory: (): Promise<PostgresDb> => PostgresDb.connect(url),
 }));

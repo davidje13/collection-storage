@@ -4,9 +4,10 @@ import contract from '../db.contract-test';
 const url = process.env.MONGO_URL || 'mongodb://localhost:27017/collection-storage-tests';
 
 describe('MongoDb', () => contract({
-  factory: async (): Promise<MongoDb> => {
+  beforeAll: async (): Promise<void> => {
     const db = await MongoDb.connect(url);
     await db.getDb().command({ dropDatabase: 1 });
-    return db;
+    await db.close();
   },
+  factory: (): Promise<MongoDb> => MongoDb.connect(url),
 }));

@@ -24,9 +24,30 @@ async function runAll<T>(promises: Promise<T>[]): Promise<T[]> {
   return results.map((r: any) => r.value);
 }
 
-export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
+function getUniqueName(): string {
+  const time = Date.now().toFixed(0);
+  const random = Math.random().toFixed(8).substr(2);
+  return `test-${time.substr(time.length - 7)}${random}`;
+}
+
+interface ConfigT {
+  beforeAll?: () => Promise<void> | void;
+  factory: () => Promise<DB> | DB;
+  afterAll?: () => Promise<void> | void;
+}
+
+const nop = (): void => undefined;
+
+export default ({
+  beforeAll: beforeAllFn = nop,
+  factory,
+  afterAll: afterAllFn = nop,
+}: ConfigT): void => {
   let db: DB;
   let col: Collection<TestType>;
+
+  beforeAll(beforeAllFn);
+  afterAll(afterAllFn);
 
   beforeEach(async () => {
     db = await factory();
@@ -61,7 +82,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
   it('allows special characters in attribute names', async () => {
     const attribute = '\\s\'p"e-c_i+a=l&c$h!a:r;a?c,t.e(r)s%h[e]r{e}\\';
-    const specialCharCol = db.getCollection<any>('test-simple');
+    const specialCharCol = db.getCollection<any>(getUniqueName());
 
     const stored = { id: '1', [attribute]: 'foo' };
     await specialCharCol.add(stored);
@@ -72,7 +93,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
   it('allows special characters in indices', async () => {
     const attribute = '\\s\'p"e-c_i+a=l&c$h!a:r;a?c,t.e(r)s%h[e]r{e}\\';
-    const specialCharCol = db.getCollection<any>('test-simple', {
+    const specialCharCol = db.getCollection<any>(getUniqueName(), {
       [attribute]: { unique: true },
     });
 
@@ -85,7 +106,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
   it('stores and retrieves JSON data', async () => {
     const stored = { id: '1', value: { nested: ['hi', { object: 3 }] } };
-    const complexCol = db.getCollection<typeof stored>('test-json');
+    const complexCol = db.getCollection<typeof stored>(getUniqueName());
 
     await complexCol.add(stored);
 
@@ -97,7 +118,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
   it('stores and retrieves binary data', async () => {
     const stored = { id: '1', value: Buffer.from('hello', 'utf8') };
-    const complexCol = db.getCollection<typeof stored>('test-json');
+    const complexCol = db.getCollection<typeof stored>(getUniqueName());
 
     await complexCol.add(stored);
 
@@ -108,7 +129,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
   });
 
   it('allows duplicates in non-unique indices and retrieves all', async () => {
-    col = db.getCollection<TestType>('test-index', {
+    col = db.getCollection<TestType>(getUniqueName(), {
       idx: {},
     });
 
@@ -125,7 +146,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
   });
 
   it('rejects access after closing', async () => {
-    col = db.getCollection('test-simple');
+    col = db.getCollection(getUniqueName());
 
     await db.close();
 
@@ -140,7 +161,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
   describe('add', () => {
     it('rejects duplicate IDs', async () => {
-      col = db.getCollection('test-simple');
+      col = db.getCollection(getUniqueName());
 
       await col.add({ id: '2', value: 'bar' });
       await col.add({ id: '3', value: 'baz' });
@@ -154,7 +175,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
     });
 
     it('rejects duplicates in unique indices', async () => {
-      col = db.getCollection<TestType>('test-unique', {
+      col = db.getCollection<TestType>(getUniqueName(), {
         idx: { unique: true },
       });
 
@@ -172,7 +193,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
   describe('get', () => {
     beforeEach(async () => {
-      col = db.getCollection<TestType>('test-get', { idx: {} });
+      col = db.getCollection<TestType>(getUniqueName(), { idx: {} });
 
       await col.add({ id: '1', idx: 2, a: 'A1', b: 'B1' });
     });
@@ -215,7 +236,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
     it('allows querying by JSON data', async () => {
       const value = { nested: ['hi', { object: 3 }] };
       const stored = { id: '1', value };
-      const complexCol = db.getCollection<typeof stored>('test-json-get', {
+      const complexCol = db.getCollection<typeof stored>(getUniqueName(), {
         value: {},
       });
 
@@ -231,7 +252,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
     it('allows querying by binary data', async () => {
       const value = Buffer.from('hello', 'utf8');
       const stored = { id: '1', value };
-      const complexCol = db.getCollection<typeof stored>('test-json-get', {
+      const complexCol = db.getCollection<typeof stored>(getUniqueName(), {
         value: {},
       });
 
@@ -247,7 +268,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
   describe('getAll', () => {
     beforeEach(async () => {
-      col = db.getCollection<TestType>('test-get', { idx: {} });
+      col = db.getCollection<TestType>(getUniqueName(), { idx: {} });
 
       await runAll([
         col.add({ id: '1', idx: 1, a: 'A1', b: 'B1' }),
@@ -297,7 +318,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
   describe('update', () => {
     beforeEach(async () => {
-      col = db.getCollection<TestType>('test-update', {
+      col = db.getCollection<TestType>(getUniqueName(), {
         idxs: {},
         a: { unique: true },
       });
@@ -472,7 +493,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
   describe('remove', () => {
     beforeEach(async () => {
-      col = db.getCollection<TestType>('test-remove', { idxs: {} });
+      col = db.getCollection<TestType>(getUniqueName(), { idxs: {} });
 
       await runAll([
         col.add({ id: '1', idxs: '1' }),
@@ -535,7 +556,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
 
     describe('update', () => {
       it('does not clobber other thread changes', async () => {
-        const c = db.getCollection<any>('test-update');
+        const c = db.getCollection<any>(getUniqueName());
         const expected: any = { id: '1' };
         const tasks = [];
         for (let i = 0; i < concurrency; i += 1) {
@@ -557,7 +578,7 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
       });
 
       it('allows the first entry to upsert', async () => {
-        const c = db.getCollection<any>('test-update');
+        const c = db.getCollection<any>(getUniqueName());
         const expected: any = { id: '1' };
         const tasks = [];
         for (let i = 0; i < concurrency; i += 1) {
