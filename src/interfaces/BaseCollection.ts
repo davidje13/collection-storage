@@ -12,78 +12,48 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     return this.internalAdd(entry);
   }
 
-  public get<K extends keyof T & string>(
-    key: K,
-    value: T[K],
-  ): Promise<Readonly<T> | null>;
-
-  public get<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
-  >(
-    key: K,
-    value: T[K],
-    fields: F,
-  ): Promise<Readonly<Pick<T, F[-1]>> | null>;
-
   public async get<
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
-    keyName: K,
-    key: T[K],
-    fields?: F,
+    searchAttribute: K,
+    searchValue: T[K],
+    returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
-    if (!this.isIndexed(keyName)) {
-      throw new Error(`No index for ${keyName}`);
+    if (!this.isIndexed(searchAttribute)) {
+      throw new Error(`No index for ${searchAttribute}`);
     }
     await this.preAct();
-    return this.internalGet(keyName, key, fields);
+    return this.internalGet(searchAttribute, searchValue, returnAttributes);
   }
-
-  public getAll(): Promise<Readonly<T>[]>;
-
-  public getAll<K extends keyof T & string>(
-    key: K,
-    value: T[K],
-  ): Promise<Readonly<T>[]>;
-
-  public getAll<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[],
-  >(
-    key: K,
-    value: T[K],
-    fields: F,
-  ): Promise<Readonly<Pick<T, F[-1]>>[]>;
 
   public async getAll<
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
-    keyName?: K,
-    key?: T[K],
-    fields?: F,
+    searchAttribute?: K,
+    searchValue?: T[K],
+    returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
-    if (keyName && !this.isIndexed(keyName)) {
-      throw new Error(`No index for ${keyName}`);
+    if (searchAttribute && !this.isIndexed(searchAttribute)) {
+      throw new Error(`No index for ${searchAttribute}`);
     }
     await this.preAct();
-    return this.internalGetAll(keyName, key, fields);
+    return this.internalGetAll(searchAttribute, searchValue, returnAttributes);
   }
 
   public async update<K extends keyof T & string>(
-    key: K,
-    value: T[K],
+    searchAttribute: K,
+    searchValue: T[K],
     update: Partial<T>,
     options: UpdateOptions = {},
   ): Promise<void> {
-    if (key === 'id' && update.id !== undefined && update.id !== value) {
+    if (searchAttribute === 'id' && update.id !== undefined && update.id !== searchValue) {
       throw new Error('Cannot update ID');
     }
     if (options.upsert) {
-      if (key !== 'id') {
-        throw new Error(`Can only upsert by ID, not ${key}`);
+      if (searchAttribute !== 'id') {
+        throw new Error(`Can only upsert by ID, not ${searchAttribute}`);
       }
       await this.preAct();
       let withoutId = update;
@@ -91,40 +61,46 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
         withoutId = { ...update };
         delete withoutId.id;
       }
-      return this.internalUpsert(value as T['id'], withoutId, options);
+      return this.internalUpsert(searchValue as T['id'], withoutId, options);
     }
-    if (!this.isIndexed(key)) {
-      throw new Error(`No index for ${key}`);
+    if (!this.isIndexed(searchAttribute)) {
+      throw new Error(`No index for ${searchAttribute}`);
     }
     if (
-      !this.isIndexUnique(key) &&
+      !this.isIndexUnique(searchAttribute) &&
       Object.keys(update).some((k) => this.isIndexUnique(k))
     ) {
       throw new Error('duplicate');
     }
 
     await this.preAct();
-    return this.internalUpdate(key, value, update, options);
+    return this.internalUpdate(searchAttribute, searchValue, update, options);
   }
 
   public async remove<K extends keyof T & string>(
-    key: K,
-    value: T[K],
+    searchAttribute: K,
+    searchValue: T[K],
   ): Promise<number> {
-    if (!this.isIndexed(key)) {
-      throw new Error(`No index for ${key}`);
+    if (!this.isIndexed(searchAttribute)) {
+      throw new Error(`No index for ${searchAttribute}`);
     }
     await this.preAct();
-    return this.internalRemove(key, value);
+    return this.internalRemove(searchAttribute, searchValue);
   }
 
-  protected isIndexed(key: string): boolean {
-    return key === 'id' || (this.keys[key as keyof DBKeys<T>] !== undefined);
+  protected isIndexed(attribute: string): boolean {
+    return (
+      attribute === 'id' ||
+      this.keys[attribute as keyof DBKeys<T>] !== undefined
+    );
   }
 
-  protected isIndexUnique(key: string): boolean {
-    const keyOptions = this.keys[key as keyof DBKeys<T>];
-    return key === 'id' || Boolean(keyOptions && keyOptions.unique);
+  protected isIndexUnique(attribute: string): boolean {
+    const keyOptions = this.keys[attribute as keyof DBKeys<T>];
+    return (
+      attribute === 'id' ||
+      Boolean(keyOptions && keyOptions.unique)
+    );
   }
 
   // eslint-disable-next-line class-methods-use-this, @typescript-eslint/no-empty-function
@@ -134,11 +110,11 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
-    keyName: K,
-    key: T[K],
-    fields?: F,
+    searchAttribute: K,
+    searchValue: T[K],
+    returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
-    const all = await this.internalGetAll(keyName, key, fields);
+    const all = await this.internalGetAll(searchAttribute, searchValue, returnAttributes);
     return (all.length > 0) ? all[0] : null;
   }
 
@@ -156,20 +132,20 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
-    keyName?: K,
-    key?: T[K],
+    searchAttribute?: K,
+    searchValue?: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]>;
 
   protected abstract internalUpdate<K extends keyof T & string>(
-    key: K,
-    value: T[K],
+    searchAttribute: K,
+    searchValue: T[K],
     update: Partial<T>,
     options: UpdateOptions,
   ): Promise<void>;
 
   protected abstract internalRemove<K extends keyof T & string>(
-    key: K,
-    value: T[K],
+    searchAttribute: K,
+    searchValue: T[K],
   ): Promise<number>;
 }

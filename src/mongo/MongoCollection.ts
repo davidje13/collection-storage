@@ -117,16 +117,16 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
   }
 
   protected async internalUpdate<K extends keyof T & string>(
-    keyName: K,
-    key: T[K],
-    value: Partial<T>,
+    searchAttribute: K,
+    searchValue: T[K],
+    update: Partial<T>,
   ): Promise<void> {
-    const query = convertToMongo({ [keyName]: key });
-    const update = { $set: convertToMongo(value) };
-    if (this.isIndexUnique(keyName)) {
-      await this.getCollection().updateOne(query, update);
+    const query = convertToMongo({ [searchAttribute]: searchValue });
+    const mongoUpdate = { $set: convertToMongo(update) };
+    if (this.isIndexUnique(searchAttribute)) {
+      await this.getCollection().updateOne(query, mongoUpdate);
     } else {
-      await this.getCollection().updateMany(query, update);
+      await this.getCollection().updateMany(query, mongoUpdate);
     }
   }
 
@@ -134,13 +134,13 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
-    keyName: K,
-    key: T[K],
-    fields?: F,
+    searchAttribute: K,
+    searchValue: T[K],
+    returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
     const raw = await this.getCollection().findOne(
-      convertToMongo({ [keyName]: key }),
-      { projection: makeMongoProjection(fields) },
+      convertToMongo({ [searchAttribute]: searchValue }),
+      { projection: makeMongoProjection(returnAttributes) },
     );
     return convertFromMongo<T>(raw);
   }
@@ -149,13 +149,13 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
-    keyName?: K,
-    key?: T[K],
-    fields?: F,
+    searchAttribute?: K,
+    searchValue?: T[K],
+    returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
     const cursor = this.getCollection().find(
-      keyName ? convertToMongo({ [keyName]: key }) : {},
-      { projection: makeMongoProjection(fields) },
+      searchAttribute ? convertToMongo({ [searchAttribute]: searchValue }) : {},
+      { projection: makeMongoProjection(returnAttributes) },
     );
 
     const result: Pick<T, F[-1]>[] = [];
@@ -165,11 +165,11 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
   }
 
   protected async internalRemove<K extends keyof T & string>(
-    key: K,
-    value: T[K],
+    searchAttribute: K,
+    searchValue: T[K],
   ): Promise<number> {
     const result = await this.getCollection().deleteMany(
-      convertToMongo({ [key]: value }),
+      convertToMongo({ [searchAttribute]: searchValue }),
     );
     return result.deletedCount || 0;
   }

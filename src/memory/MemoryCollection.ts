@@ -69,26 +69,26 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
 
   protected async internalUpsert(
     id: T['id'],
-    value: Partial<T>,
+    update: Partial<T>,
   ): Promise<void> {
     if (this.data.has(serialiseValue(id))) {
-      await this.internalUpdate('id', id, value);
+      await this.internalUpdate('id', id, update);
     } else {
-      await this.internalAdd({ id, ...value } as T);
+      await this.internalAdd({ id, ...update } as T);
     }
   }
 
   protected async internalUpdate<K extends keyof T & string>(
-    keyName: K,
-    key: T[K],
-    value: Partial<T>,
+    searchAttribute: K,
+    searchValue: T[K],
+    update: Partial<T>,
   ): Promise<void> {
-    const sIds = this.internalGetSerialisedIds(keyName, key);
+    const sIds = this.internalGetSerialisedIds(searchAttribute, searchValue);
 
     const updates = sIds.map((sId) => {
       const oldSerialised = this.data.get(sId)!;
       const oldValue = deserialiseRecord(oldSerialised) as T;
-      const newValue = { ...oldValue, ...value };
+      const newValue = { ...oldValue, ...update };
       if (newValue.id !== oldValue.id) {
         throw new Error('Cannot update ID');
       }
@@ -113,27 +113,27 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
-    keyName?: K,
-    key?: T[K],
-    fields?: F,
+    searchAttribute?: K,
+    searchValue?: T[K],
+    returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
     let sIds: string[];
-    if (keyName) {
-      sIds = this.internalGetSerialisedIds(keyName, key!);
+    if (searchAttribute) {
+      sIds = this.internalGetSerialisedIds(searchAttribute, searchValue!);
     } else {
       sIds = [...this.data.keys()];
     }
     return sIds.map((sId) => applyFilter(
       deserialiseRecord(this.data.get(sId)!) as T,
-      fields,
+      returnAttributes,
     ));
   }
 
   protected async internalRemove<K extends keyof T & string>(
-    key: K,
-    value: T[K],
+    searchAttribute: K,
+    searchValue: T[K],
   ): Promise<number> {
-    const sIds = this.internalGetSerialisedIds(key, value);
+    const sIds = this.internalGetSerialisedIds(searchAttribute, searchValue);
     sIds.forEach((sId) => {
       const oldSerialised = this.data.get(sId)!;
       this.internalRemoveIndices(oldSerialised);
@@ -144,16 +144,16 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
   }
 
   private internalGetSerialisedIds<K extends keyof T>(
-    keyName: K,
-    key: T[K],
+    searchAttribute: K,
+    searchValue: T[K],
   ): string[] {
-    const sKey = serialiseValue(key);
-    if (keyName === 'id') {
+    const sKey = serialiseValue(searchValue);
+    if (searchAttribute === 'id') {
       return this.data.has(sKey) ? [sKey] : [];
     }
-    const index = this.indices[keyName];
+    const index = this.indices[searchAttribute];
     if (!index) {
-      throw new Error(`Requested key ${keyName} not indexed`);
+      throw new Error(`Requested key ${searchAttribute} not indexed`);
     }
     const sIds = index.get(sKey);
     return sIds ? [...sIds] : []; // convert set to array

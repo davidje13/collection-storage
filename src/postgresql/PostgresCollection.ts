@@ -145,17 +145,17 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
   }
 
   protected async internalUpdate<K extends keyof T & string>(
-    keyName: K,
-    key: T[K],
+    searchAttribute: K,
+    searchValue: T[K],
     { id, ...rest }: Partial<T>,
   ): Promise<void> {
-    const sId = serialiseValue(key);
+    const sId = serialiseValue(searchValue);
     const hstore = toHStore(rest);
 
-    if (keyName === 'id') {
+    if (searchAttribute === 'id') {
       await this.runTableQuery('UPDATE_ID', hstore, sId);
     } else {
-      const r = await this.runTableQuery('UPDATE', hstore, keyName, sId);
+      const r = await this.runTableQuery('UPDATE', hstore, searchAttribute, sId);
       if (id !== undefined && r.rowCount > 0 && r.rows[0][0] !== id) {
         throw new Error('Cannot update ID');
       }
@@ -166,50 +166,50 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
-    keyName: K,
-    key: T[K],
-    fields?: F,
+    searchAttribute: K,
+    searchValue: T[K],
+    returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
     let raw;
-    if (keyName === 'id') {
-      raw = await this.runTableQuery('SELECT_ID', serialiseValue(key));
+    if (searchAttribute === 'id') {
+      raw = await this.runTableQuery('SELECT_ID', serialiseValue(searchValue));
     } else {
-      raw = await this.runTableQuery('SELECT_ONE', keyName, serialiseValue(key));
+      raw = await this.runTableQuery('SELECT_ONE', searchAttribute, serialiseValue(searchValue));
     }
     if (!raw.rowCount) {
       return null;
     }
-    return fromHStore<T>(raw.rows[0], fields);
+    return fromHStore<T>(raw.rows[0], returnAttributes);
   }
 
   protected async internalGetAll<
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
-    keyName?: K,
-    key?: T[K],
-    fields?: F,
+    searchAttribute?: K,
+    searchValue?: T[K],
+    returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
     let raw;
-    if (!keyName) {
+    if (!searchAttribute) {
       raw = await this.runTableQuery('SELECT_ALL');
-    } else if (keyName === 'id') {
-      raw = await this.runTableQuery('SELECT_ID', serialiseValue(key));
+    } else if (searchAttribute === 'id') {
+      raw = await this.runTableQuery('SELECT_ID', serialiseValue(searchValue));
     } else {
-      raw = await this.runTableQuery('SELECT_ALL_BY', keyName, serialiseValue(key));
+      raw = await this.runTableQuery('SELECT_ALL_BY', searchAttribute, serialiseValue(searchValue));
     }
-    return raw.rows.map((v) => fromHStore<T>(v, fields));
+    return raw.rows.map((v) => fromHStore<T>(v, returnAttributes));
   }
 
   protected async internalRemove<K extends keyof T & string>(
-    key: K,
-    value: T[K],
+    searchAttribute: K,
+    searchValue: T[K],
   ): Promise<number> {
     let raw;
-    if (key === 'id') {
-      raw = await this.runTableQuery('DELETE_ID', serialiseValue(value));
+    if (searchAttribute === 'id') {
+      raw = await this.runTableQuery('DELETE_ID', serialiseValue(searchValue));
     } else {
-      raw = await this.runTableQuery('DELETE', key, serialiseValue(value));
+      raw = await this.runTableQuery('DELETE', searchAttribute, serialiseValue(searchValue));
     }
     return raw.rowCount;
   }

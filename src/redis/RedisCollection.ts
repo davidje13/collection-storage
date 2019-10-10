@@ -105,15 +105,15 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
   }
 
   protected internalUpdate<K extends keyof T & string>(
-    keyName: K,
-    key: T[K],
-    value: Partial<T>,
+    searchAttribute: K,
+    searchValue: T[K],
+    update: Partial<T>,
     { upsert }: UpdateOptions,
   ): Promise<void> {
-    const patchSerialised = serialiseRecord(value);
-    const sKey = serialiseValue(key);
+    const patchSerialised = serialiseRecord(update);
+    const sKey = serialiseValue(searchValue);
 
-    if (keyName === 'id') {
+    if (searchAttribute === 'id') {
       return this.pool.retryWithConnection(async (client) => {
         const patch = await this.getUpdatePatch(client, sKey, patchSerialised);
         if (patch) {
@@ -128,7 +128,7 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
     }
 
     return this.pool.retryWithConnection(async (client) => {
-      const sIds = await this.getAndWatchBySerialisedKey(client, keyName, sKey);
+      const sIds = await this.getAndWatchBySerialisedKey(client, searchAttribute, sKey);
       const patches = (await mapAwaitSync(
         sIds,
         (sId) => this.getUpdatePatch(client, sId, patchSerialised),
@@ -141,17 +141,17 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
-    keyName: K,
-    key: T[K],
-    fields?: F,
+    searchAttribute: K,
+    searchValue: T[K],
+    returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
-    const sKey = serialiseValue(key);
+    const sKey = serialiseValue(searchValue);
     return this.pool.retryWithConnection(async (client) => {
-      const sId = (await this.getAndWatchBySerialisedKey(client, keyName, sKey))[0];
+      const sId = (await this.getAndWatchBySerialisedKey(client, searchAttribute, sKey))[0];
       if (sId === undefined) {
         return null;
       }
-      const results = await this.getByKeysKeepWatches(client, [sId], fields);
+      const results = await this.getByKeysKeepWatches(client, [sId], returnAttributes);
       return results[0] || null;
     }, unwatchAll);
   }
@@ -160,34 +160,34 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
-    keyName?: K,
-    key?: T[K],
-    fields?: F,
+    searchAttribute?: K,
+    searchValue?: T[K],
+    returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
     return this.pool.retryWithConnection(async (client) => {
       let sIds: string[];
-      if (keyName) {
-        const sKey = serialiseValue(key);
-        sIds = await this.getAndWatchBySerialisedKey(client, keyName, sKey);
+      if (searchAttribute) {
+        const sKey = serialiseValue(searchValue);
+        sIds = await this.getAndWatchBySerialisedKey(client, searchAttribute, sKey);
       } else {
         sIds = await client.keys(this.makeKey('*'));
         const cut = this.prefix.length + 1;
         sIds = sIds.map((v) => v.substr(cut));
       }
-      return this.getByKeysKeepWatches(client, sIds, fields);
+      return this.getByKeysKeepWatches(client, sIds, returnAttributes);
     }, unwatchAll);
   }
 
   protected internalRemove<K extends keyof T & string>(
-    key: K,
-    value: T[K],
+    searchAttribute: K,
+    searchValue: T[K],
   ): Promise<number> {
-    const sKey = serialiseValue(value);
+    const sKey = serialiseValue(searchValue);
     const indexedKeys = Object.keys(this.keys);
     indexedKeys.push('id');
 
     return this.pool.retryWithConnection(async (client) => {
-      const sIds = await this.getAndWatchBySerialisedKey(client, key, sKey);
+      const sIds = await this.getAndWatchBySerialisedKey(client, searchAttribute, sKey);
       const items = (await mapAwaitSync(
         sIds,
         (sId) => this.rawByKeyKeepWatches(client, sId, indexedKeys),
