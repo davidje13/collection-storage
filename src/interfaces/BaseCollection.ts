@@ -79,7 +79,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     options: UpdateOptions = {},
   ): Promise<void> {
     if (key === 'id' && update.id !== undefined && update.id !== value) {
-      throw new Error('Cannot update id');
+      throw new Error('Cannot update ID');
     }
     if (options.upsert) {
       if (key !== 'id') {

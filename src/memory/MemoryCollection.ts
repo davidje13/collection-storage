@@ -90,7 +90,7 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
       const oldValue = deserialiseRecord(oldSerialised) as T;
       const newValue = { ...oldValue, ...value };
       if (newValue.id !== oldValue.id) {
-        throw new Error('Cannot update id');
+        throw new Error('Cannot update ID');
       }
       const newSerialised = serialiseRecord(newValue);
       return { oldSerialised, newSerialised };
