@@ -263,10 +263,13 @@ with an `id` and any other fields you wish to save.
 await collection.update(searchAttr, searchValue, update, [options]);
 ```
 
-Updates one entry which matches `searchAttr = searchValue`. Any
+Updates all entries which match `searchAttr = searchValue`. Any
 attributes not specified in `update` will remain unchanged.
 
 The `searchAttr` can be any indexed attribute (including `id`).
+
+When using a non-unique index, only non-unique values can be
+specified, even if the data contains only one matching entry.
 
 If `options` is `{ upsert: true }` and no values match the search, a
 new entry will be added. If using `upsert` mode, the `searchAttr`

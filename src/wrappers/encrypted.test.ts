@@ -13,6 +13,7 @@ import IDable from '../interfaces/IDable';
 interface TestType {
   id: string;
   unencrypted: number;
+  unencUnique: number;
   encrypted: number;
 }
 
@@ -29,14 +30,23 @@ describe('encryption', () => {
 
     beforeEach(async () => {
       const db = await CollectionStorage.connect('memory://');
-      backingCol = db.getCollection('enc', { encrypted: {}, unencrypted: {} });
+      backingCol = db.getCollection('enc', {
+        encrypted: {},
+        unencrypted: {},
+        unencUnique: { unique: true },
+      });
       const enc = encryptByKey(rootKey);
       col = enc<TestType>()(['encrypted'], backingCol);
+
+      await col.add({
+        id: 'a',
+        unencrypted: 4,
+        unencUnique: 4,
+        encrypted: 9,
+      });
     });
 
     it('stores and retrieves values transparently', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.get('id', 'a');
       expect(value!.encrypted).toEqual(9);
 
@@ -47,15 +57,18 @@ describe('encryption', () => {
     it('allows short-hand syntax without type safety', async () => {
       const enc = encryptByKey(rootKey) as any;
       const unsafeCol = enc(['encrypted'], backingCol);
-      await unsafeCol.add({ id: 'a', unencrypted: 4, encrypted: 9 });
+      await unsafeCol.add({
+        id: 'b',
+        unencrypted: 5,
+        unencUnique: 5,
+        encrypted: 10,
+      });
 
-      const value = await unsafeCol.get('id', 'a');
-      expect(value.encrypted).toEqual(9);
+      const value = await unsafeCol.get('id', 'b');
+      expect(value.encrypted).toEqual(10);
     });
 
     it('stores non-encrypted values without modification', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.get('id', 'a');
       expect(value!.id).toEqual('a');
       expect(value!.unencrypted).toEqual(4);
@@ -66,15 +79,11 @@ describe('encryption', () => {
     });
 
     it('prevents reading by encrypted key', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       await expect(col.get('encrypted', 9)).rejects
         .toThrow('Cannot get by encrypted value');
     });
 
     it('allows reading filtered columns', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.get('unencrypted', 4, ['encrypted', 'unencrypted']);
       expect(value!.unencrypted).toEqual(4);
       expect(value!.encrypted).toEqual(9);
@@ -82,9 +91,18 @@ describe('encryption', () => {
     });
 
     it('removes backing records when records are removed', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-      await col.add({ id: 'b', unencrypted: 4, encrypted: 8 });
-      await col.add({ id: 'c', unencrypted: 5, encrypted: 7 });
+      await col.add({
+        id: 'b',
+        unencrypted: 4,
+        unencUnique: 5,
+        encrypted: 8,
+      });
+      await col.add({
+        id: 'c',
+        unencrypted: 5,
+        unencUnique: 6,
+        encrypted: 7,
+      });
 
       await col.remove('unencrypted', 4);
 
@@ -94,8 +112,6 @@ describe('encryption', () => {
     });
 
     it('allows getting all values', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.getAll();
       expect(value[0].encrypted).toEqual(9);
     });
@@ -137,14 +153,23 @@ describe('encryption', () => {
     beforeEach(async () => {
       const db = await CollectionStorage.connect('memory://');
       keyCol = db.getCollection('keys');
-      backingCol = db.getCollection('enc', { encrypted: {}, unencrypted: {} });
+      backingCol = db.getCollection('enc', {
+        encrypted: {},
+        unencrypted: {},
+        unencUnique: { unique: true },
+      });
       const enc = encryptByRecord(keyCol);
       col = enc<TestType>()(['encrypted'], backingCol);
+
+      await col.add({
+        id: 'a',
+        unencrypted: 4,
+        unencUnique: 4,
+        encrypted: 9,
+      });
     });
 
     it('stores and retrieves values transparently', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.get('id', 'a');
       expect(value!.encrypted).toEqual(9);
 
@@ -153,8 +178,12 @@ describe('encryption', () => {
     });
 
     it('stores per-entry keys in the provided key table', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-      await col.add({ id: 'b', unencrypted: 5, encrypted: 8 });
+      await col.add({
+        id: 'b',
+        unencrypted: 5,
+        unencUnique: 5,
+        encrypted: 8,
+      });
 
       const valueA = await keyCol.get('id', 'a');
       expect(valueA).toBeTruthy();
@@ -168,8 +197,6 @@ describe('encryption', () => {
     });
 
     it('stores non-encrypted values without modification', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.get('id', 'a');
       expect(value!.id).toEqual('a');
       expect(value!.unencrypted).toEqual(4);
@@ -180,23 +207,28 @@ describe('encryption', () => {
     });
 
     it('prevents reading by encrypted key', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       await expect(col.get('encrypted', 9)).rejects
         .toThrow('Cannot get by encrypted value');
     });
 
     it('prevents reading filtered columns without id', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       await expect(col.get('unencrypted', 4, ['encrypted'])).rejects
         .toThrow('Must provide ID for encryption');
     });
 
     it('removes backing records and keys when records are removed', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-      await col.add({ id: 'b', unencrypted: 4, encrypted: 8 });
-      await col.add({ id: 'c', unencrypted: 5, encrypted: 7 });
+      await col.add({
+        id: 'b',
+        unencrypted: 4,
+        unencUnique: 5,
+        encrypted: 8,
+      });
+      await col.add({
+        id: 'c',
+        unencrypted: 5,
+        unencUnique: 6,
+        encrypted: 7,
+      });
 
       await col.remove('unencrypted', 4);
 
@@ -210,8 +242,6 @@ describe('encryption', () => {
     });
 
     it('allows getting all values', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.getAll();
       expect(value[0].encrypted).toEqual(9);
     });
@@ -225,14 +255,23 @@ describe('encryption', () => {
     beforeEach(async () => {
       const db = await CollectionStorage.connect('memory://');
       keyCol = db.getCollection('keys');
-      backingCol = db.getCollection('enc', { encrypted: {}, unencrypted: {} });
+      backingCol = db.getCollection('enc', {
+        encrypted: {},
+        unencrypted: {},
+        unencUnique: { unique: true },
+      });
       const enc = encryptByRecordWithMasterKey(rootKey, keyCol);
       col = enc<TestType>()(['encrypted'], backingCol);
+
+      await col.add({
+        id: 'a',
+        unencrypted: 4,
+        unencUnique: 4,
+        encrypted: 9,
+      });
     });
 
     it('stores and retrieves values transparently', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.get('id', 'a');
       expect(value!.encrypted).toEqual(9);
 
@@ -241,8 +280,12 @@ describe('encryption', () => {
     });
 
     it('stores per-entry keys in the provided key table', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-      await col.add({ id: 'b', unencrypted: 5, encrypted: 8 });
+      await col.add({
+        id: 'b',
+        unencrypted: 5,
+        unencUnique: 5,
+        encrypted: 8,
+      });
 
       const valueA = await keyCol.get('id', 'a');
       expect(valueA).toBeTruthy();
@@ -256,18 +299,19 @@ describe('encryption', () => {
     });
 
     it('does not load keys if no encrypted column is written', async () => {
-      await col.update('id', 'a', { unencrypted: 4 }, { upsert: true });
+      await col.update('id', 'b', {
+        unencrypted: 5,
+        unencUnique: 5,
+      }, { upsert: true });
 
-      const keyValue = await keyCol.get('id', 'a');
+      const keyValue = await keyCol.get('id', 'b');
       expect(keyValue).not.toBeTruthy();
     });
 
     it('does not load keys if no encrypted column is requested', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       // copy backing item without copying key
       const item = await backingCol.get('id', 'a');
-      await backingCol.add({ ...item!, id: 'b' });
+      await backingCol.add({ ...item!, id: 'b', unencUnique: 5 });
 
       const value = await col.get('id', 'b', ['id', 'unencrypted']);
       expect(value!.unencrypted).toEqual(4);
@@ -277,18 +321,15 @@ describe('encryption', () => {
     });
 
     it('throws if the requested record does not have a key', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       // copy backing item without copying key
       const item = await backingCol.get('id', 'a');
-      await backingCol.add({ ...item!, id: 'b' });
+      await backingCol.add({ ...item!, id: 'b', unencUnique: 5 });
 
       await expect(col.get('id', 'b', ['id', 'encrypted'])).rejects
         .toThrow('No encryption key found for record');
     });
 
     it('throws if the requested record has corrupted data', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
       await backingCol.update('id', 'a', {
         encrypted: Buffer.from('nope', 'utf8'),
       });
@@ -298,8 +339,6 @@ describe('encryption', () => {
     });
 
     it('stores non-encrypted values without modification', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.get('id', 'a');
       expect(value!.id).toEqual('a');
       expect(value!.unencrypted).toEqual(4);
@@ -310,7 +349,6 @@ describe('encryption', () => {
     });
 
     it('allows updating by id', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
       await col.update('id', 'a', { encrypted: 8 });
 
       const value = await col.get('id', 'a');
@@ -318,83 +356,71 @@ describe('encryption', () => {
     });
 
     it('allows updating with id', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-      await col.update('unencrypted', 4, { id: 'a', encrypted: 8 });
+      await col.update('unencUnique', 4, { id: 'a', encrypted: 8 });
 
       const value = await col.get('id', 'a');
       expect(value!.encrypted).toEqual(8);
     });
 
     it('allows upserting with id', async () => {
-      await col.update('id', 'a', { encrypted: 8 }, { upsert: true });
+      await col.update('id', 'b', {
+        encrypted: 8,
+        unencUnique: 5,
+      }, { upsert: true });
 
-      const value = await col.get('id', 'a');
+      const value = await col.get('id', 'b');
       expect(value!.encrypted).toEqual(8);
     });
 
     it('rejects updating without id', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
       await expect(col.update('unencrypted', 4, { encrypted: 8 })).rejects
         .toThrow('Must provide ID for encryption');
     });
 
     it('rejects upserting without id', async () => {
-      await expect(col.update('unencrypted', 4, { encrypted: 8 }, { upsert: true })).rejects
+      await expect(col.update('unencrypted', 4, {
+        encrypted: 8,
+        unencUnique: 5,
+      }, { upsert: true })).rejects
         .toThrow('Must provide ID for encryption');
     });
 
     it('prevents reading by encrypted key', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       await expect(col.get('encrypted', 9)).rejects
         .toThrow('Cannot get by encrypted value');
     });
 
     it('prevents reading filtered columns without id', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       await expect(col.get('unencrypted', 4, ['encrypted'])).rejects
         .toThrow('Must provide ID for encryption');
     });
 
     it('allows reading filtered columns with id', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.get('unencrypted', 4, ['id', 'encrypted']);
       expect(value!.encrypted).toEqual(9);
     });
 
     it('allows reading filtered columns if queried by id', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.get('id', 'a', ['encrypted']);
       expect(value!.encrypted).toEqual(9);
     });
 
     it('prevents reading filtered columns without id (getAll)', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       await expect(col.getAll('unencrypted', 4, ['encrypted'])).rejects
         .toThrow('Must provide ID for encryption');
     });
 
     it('allows reading filtered columns with id (getAll)', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.getAll('unencrypted', 4, ['id', 'encrypted']);
       expect(value[0].encrypted).toEqual(9);
     });
 
     it('allows reading filtered columns if queried by id (getAll)', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.getAll('id', 'a', ['encrypted']);
       expect(value[0].encrypted).toEqual(9);
     });
 
     it('allows getting all values', async () => {
-      await col.add({ id: 'a', unencrypted: 4, encrypted: 9 });
-
       const value = await col.getAll();
       expect(value[0].encrypted).toEqual(9);
     });

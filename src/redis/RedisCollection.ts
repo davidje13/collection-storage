@@ -1,5 +1,6 @@
 import IDable from '../interfaces/IDable';
-import Collection from '../interfaces/Collection';
+import BaseCollection from '../interfaces/BaseCollection';
+import { UpdateOptions } from '../interfaces/Collection';
 import { DBKeys } from '../interfaces/DB';
 import {
   serialiseValue,
@@ -14,6 +15,14 @@ interface Key<T> {
   key: keyof T & string;
   prefix: string;
 }
+
+interface InternalPatch {
+  sId: string;
+  oldSerialised: Record<string, string | null>;
+  newSerialised: Record<string, string>;
+}
+
+const notUndefined = <T>(item?: T): item is T => (item !== undefined);
 
 function makeIndexKeys(
   keys: Key<any>[],
@@ -46,10 +55,20 @@ async function unwatchAll(client: ERedis): Promise<void> {
   await client.unwatch();
 }
 
-export default class RedisCollection<T extends IDable> implements Collection<T> {
-  private readonly keyPrefixes: { [K in keyof T]?: string } = {};
+async function mapAwaitSync<T, O>(
+  values: T[],
+  fn: (value: T) => Promise<O>,
+): Promise<O[]> {
+  const result: O[] = [];
+  for (let i = 0; i < values.length; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    result.push(await fn(values[i]));
+  }
+  return result;
+}
 
-  private readonly keys: Key<T>[] = [];
+export default class RedisCollection<T extends IDable> extends BaseCollection<T> {
+  private readonly keyPrefixes: { [K in keyof T]?: string } = {};
 
   private readonly uniqueKeys: Key<T>[] = [];
 
@@ -60,12 +79,13 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     private readonly prefix: string,
     keys: DBKeys<T> = {},
   ) {
+    super(keys);
+
     Object.keys(keys).forEach((k) => {
       const key = k as keyof DBKeys<T>;
       const keyPrefix = `${prefix}-${key}`;
       this.keyPrefixes[key] = keyPrefix;
       const keyInfo = { key, prefix: keyPrefix };
-      this.keys.push(keyInfo);
       if (keys[key]!.unique) {
         this.uniqueKeys.push(keyInfo);
       } else {
@@ -74,104 +94,50 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     });
   }
 
-  public add(value: T): Promise<void> {
+  protected internalAdd(value: T): Promise<void> {
     const serialised = serialiseRecord(value);
     return this.pool.withConnection(async (client) => {
-      const added = await this.internalAdd(client, serialised, false);
+      const added = await this.runAdd(client, serialised, false);
       if (!added) {
         throw new Error('duplicate');
       }
     });
   }
 
-  public update<K extends keyof T & string>(
+  protected internalUpdate<K extends keyof T & string>(
     keyName: K,
     key: T[K],
     value: Partial<T>,
-    { upsert = false } = {},
+    { upsert }: UpdateOptions,
   ): Promise<void> {
-    if (upsert && keyName !== 'id') {
-      throw new Error(`Can only upsert by ID, not ${keyName}`);
-    }
-
-    const { id, ...patchSerialised } = serialiseRecord(value);
+    const patchSerialised = serialiseRecord(value);
     const sKey = serialiseValue(key);
 
-    return this.pool.retryWithConnection(async (client) => {
-      const sId = (await this.getAndWatchBySerialisedKey(client, keyName, sKey))[0];
-      if (sId) {
-        if (id && id !== sId) {
-          throw new Error('Cannot update id');
-        }
-      } else if (!upsert) {
-        return;
-      }
-      const rKey = this.makeKey(sId || id);
-      await client.watch(rKey);
-      const oldSerialised = sId && await this.rawByKeyKeepWatches(
-        client,
-        sId,
-        this.keys.map((k) => k.key).filter((k) => patchSerialised[k]),
-      );
-      if (!oldSerialised) {
-        if (upsert) {
-          const success = await this.internalAdd(
-            client,
-            { id, [keyName]: sKey, ...patchSerialised },
-            true,
-          );
-          if (!success) {
+    if (keyName === 'id') {
+      return this.pool.retryWithConnection(async (client) => {
+        const patch = await this.getUpdatePatch(client, sKey, patchSerialised);
+        if (patch) {
+          await this.runUpdates(client, [patch]);
+        } else if (upsert) {
+          const insertValue = { ...patchSerialised, id: sKey };
+          if (!await this.runAdd(client, insertValue, true)) {
             throw new Error('duplicate');
           }
         }
-        return;
-      }
-      Object.keys(patchSerialised).forEach((k) => {
-        if (oldSerialised[k] === patchSerialised[k]) {
-          delete patchSerialised[k];
-          delete oldSerialised[k];
-        }
-      });
-      const diff = Object.entries(patchSerialised).flat();
-      if (!diff.length) {
-        return; // nothing changed
-      }
-      const patchUniqueKeys = makeIndexKeys(this.uniqueKeys, patchSerialised);
-      const patchNonUniqueKeys = makeIndexKeys(this.nonUniqueKeys, patchSerialised);
-      const oldUniqueKeys = makeIndexKeys(this.uniqueKeys, oldSerialised);
-      const oldNonUniqueKeys = makeIndexKeys(this.nonUniqueKeys, oldSerialised);
-      if (
-        oldUniqueKeys.length !== patchUniqueKeys.length ||
-        oldNonUniqueKeys.length !== patchNonUniqueKeys.length
-      ) {
-        throw new Error('unexpected key mismatch with old value');
-      }
-      const keyCount = 1 + (patchUniqueKeys.length + patchNonUniqueKeys.length) * 2;
-      const params = [
-        rKey,
-        ...patchUniqueKeys,
-        ...patchNonUniqueKeys,
-        ...oldUniqueKeys,
-        ...oldNonUniqueKeys,
-        patchUniqueKeys.length,
-        patchUniqueKeys.length + patchNonUniqueKeys.length,
-        sId,
-        ...diff,
-      ];
-      const updated = await client
-        .multi()
-        .update(keyCount, params)
-        .exec();
-      if (!updated) {
-        throw new Error('transient error');
-      }
-      if (!updated[0][1]) {
-        throw new Error('duplicate');
-      }
+      }, unwatchAll);
+    }
+
+    return this.pool.retryWithConnection(async (client) => {
+      const sIds = await this.getAndWatchBySerialisedKey(client, keyName, sKey);
+      const patches = (await mapAwaitSync(
+        sIds,
+        (sId) => this.getUpdatePatch(client, sId, patchSerialised),
+      )).filter(notUndefined);
+      await this.runUpdates(client, patches);
     }, unwatchAll);
   }
 
-  public get<
+  protected internalGet<
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
@@ -190,7 +156,7 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     }, unwatchAll);
   }
 
-  public getAll<
+  protected internalGetAll<
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
@@ -212,19 +178,20 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     }, unwatchAll);
   }
 
-  public remove<K extends keyof T & string>(
+  protected internalRemove<K extends keyof T & string>(
     key: K,
     value: T[K],
   ): Promise<number> {
     const sKey = serialiseValue(value);
-    const indexedKeys = this.keys.map((k) => k.key);
+    const indexedKeys = Object.keys(this.keys);
     indexedKeys.push('id');
 
     return this.pool.retryWithConnection(async (client) => {
       const sIds = await this.getAndWatchBySerialisedKey(client, key, sKey);
-      const items = (await Promise.all(
-        sIds.map((sId) => this.rawByKeyKeepWatches(client, sId, indexedKeys)),
-      )).filter(<T>(item?: T): item is T => (item !== undefined));
+      const items = (await mapAwaitSync(
+        sIds,
+        (sId) => this.rawByKeyKeepWatches(client, sId, indexedKeys),
+      )).filter(notUndefined);
 
       if (items.length === 0) {
         return 0;
@@ -232,11 +199,13 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
 
       const pipeline = client.multi();
       items.forEach((item) => {
-        const keys = makeIndexKeys(this.keys, item);
+        const uniqueKeys = makeIndexKeys(this.uniqueKeys, item);
+        const nonUniqueKeys = makeIndexKeys(this.nonUniqueKeys, item);
         pipeline.remove(
-          1 + keys.length,
+          1 + uniqueKeys.length + nonUniqueKeys.length,
           this.makeKey(item.id!),
-          ...keys,
+          ...uniqueKeys,
+          ...nonUniqueKeys,
           item.id!,
         );
       });
@@ -249,7 +218,7 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     return `${this.prefix}:${serialisedId}`;
   }
 
-  private async internalAdd(
+  private async runAdd(
     client: ERedis,
     { id, ...serialised }: Record<string, string>,
     checkWatch: boolean,
@@ -282,6 +251,107 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
     return Boolean(result[0][1]);
   }
 
+  private async getUpdatePatch(
+    client: ERedis,
+    sId: string,
+    patchSerialised: Record<string, string>,
+  ): Promise<InternalPatch | undefined> {
+    await client.watch(this.makeKey(sId));
+    const oldSerialised = await this.rawByKeyKeepWatches(
+      client,
+      sId,
+      Object.keys(this.keys).filter((k) => patchSerialised[k]),
+    );
+    if (!oldSerialised) {
+      return undefined;
+    }
+    const newSerialised = { ...patchSerialised };
+    Object.keys(newSerialised).forEach((k) => {
+      if (oldSerialised[k] === newSerialised[k]) {
+        delete newSerialised[k];
+        delete oldSerialised[k];
+      }
+    });
+    return { sId, newSerialised, oldSerialised };
+  }
+
+  private async runUpdates(
+    client: ERedis,
+    patches: InternalPatch[],
+  ): Promise<void> {
+    const argsList = patches
+      .map((patch) => this.makeUpdateArgs(patch))
+      .filter(notUndefined);
+
+    if (!argsList.length) {
+      return;
+    }
+
+    if (argsList.length === 1) {
+      const results = await client.multi()
+        .update(argsList[0][0], argsList[0][1])
+        .exec();
+
+      if (!results) {
+        throw new Error('transient error');
+      }
+      if (!results[0][1]) {
+        throw new Error('duplicate');
+      }
+      return;
+    }
+
+    const updateCheckResults = await mapAwaitSync(
+      argsList,
+      (updateArgs) => client.checkUpdate(updateArgs[0], updateArgs[1]),
+    );
+    if (updateCheckResults.some((r) => !r)) {
+      throw new Error('duplicate');
+    }
+
+    let chain = client.multi();
+    argsList.forEach((updateArgs) => {
+      chain = chain.updateWithoutCheck(updateArgs[0], updateArgs[1]);
+    });
+    const results = await chain.exec();
+
+    if (!results) {
+      throw new Error('transient error');
+    }
+  }
+
+  private makeUpdateArgs(
+    { sId, oldSerialised, newSerialised }: InternalPatch,
+  ): [number, any[]] | undefined {
+    const diff = Object.entries(newSerialised).flat();
+    if (!diff.length) {
+      return undefined; // nothing changed
+    }
+    const patchUniqueKeys = makeIndexKeys(this.uniqueKeys, newSerialised);
+    const patchNonUniqueKeys = makeIndexKeys(this.nonUniqueKeys, newSerialised);
+    const oldUniqueKeys = makeIndexKeys(this.uniqueKeys, oldSerialised);
+    const oldNonUniqueKeys = makeIndexKeys(this.nonUniqueKeys, oldSerialised);
+    if (
+      oldUniqueKeys.length !== patchUniqueKeys.length ||
+      oldNonUniqueKeys.length !== patchNonUniqueKeys.length
+    ) {
+      throw new Error('unexpected key mismatch with old value');
+    }
+    const keyCount = 1 + (patchUniqueKeys.length + patchNonUniqueKeys.length) * 2;
+    const params = [
+      this.makeKey(sId),
+      ...patchUniqueKeys,
+      ...patchNonUniqueKeys,
+      ...oldUniqueKeys,
+      ...oldNonUniqueKeys,
+      patchUniqueKeys.length,
+      patchUniqueKeys.length + patchNonUniqueKeys.length,
+      sId,
+      ...diff,
+    ];
+    return [keyCount, params];
+  }
+
   private async getByKeysKeepWatches<F extends readonly (keyof T & string)[]>(
     client: ERedis,
     serialisedIds: string[],
@@ -305,7 +375,7 @@ export default class RedisCollection<T extends IDable> implements Collection<T> 
   private async rawByKeyKeepWatches(
     client: ERedis,
     serialisedId: string,
-    fields?: readonly (keyof T & string)[],
+    fields?: readonly string[],
   ): Promise<Record<string, string | null> | undefined> {
     const key = this.makeKey(serialisedId);
     let item;

@@ -15,15 +15,27 @@ export default interface Collection<T extends IDable> {
     key: K,
     value: T[K],
   ): Promise<Readonly<T> | null>;
-  get<K extends keyof T, F extends readonly (keyof T & string)[]>(
+
+  get<
+    K extends keyof T & string,
+    F extends readonly (keyof T & string)[]
+  >(
     key: K,
     value: T[K],
     fields: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null>;
 
   getAll(): Promise<Readonly<T>[]>;
-  getAll<K extends keyof T & string>(key: K, value: T[K]): Promise<Readonly<T>[]>;
-  getAll<K extends keyof T & string, F extends readonly (keyof T & string)[]>(
+
+  getAll<K extends keyof T & string>(
+    key: K,
+    value: T[K],
+  ): Promise<Readonly<T>[]>;
+
+  getAll<
+    K extends keyof T & string,
+    F extends readonly (keyof T & string)[],
+  >(
     key: K,
     value: T[K],
     fields: F,
@@ -36,5 +48,8 @@ export default interface Collection<T extends IDable> {
     options?: UpdateOptions,
   ): Promise<void>;
 
-  remove<K extends keyof T & string>(key: K, value: T[K]): Promise<number>;
+  remove<K extends keyof T & string>(
+    key: K,
+    value: T[K],
+  ): Promise<number>;
 }

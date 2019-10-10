@@ -1,10 +1,9 @@
 import {
   Collection as MCollection,
-  Cursor as MCursor,
   Binary as MBinary,
 } from 'mongodb';
 import IDable from '../interfaces/IDable';
-import Collection from '../interfaces/Collection';
+import BaseCollection from '../interfaces/BaseCollection';
 import { DBKeys } from '../interfaces/DB';
 import retry from '../helpers/retry';
 
@@ -70,23 +69,26 @@ function convertFromMongo<T extends Partial<IDable>>(
   return converted;
 }
 
-function makeMongoFields(names?: readonly string[]): Record<string, boolean> {
-  const fields: Record<string, boolean> = {};
+function makeMongoProjection(
+  names?: readonly string[],
+): Record<string, boolean> {
+  const projection: Record<string, boolean> = {};
   if (names) {
-    fields[MONGO_ID] = false;
+    projection[MONGO_ID] = false;
     names.forEach((fieldName) => {
-      fields[fieldNameToMongo(fieldName)] = true;
+      projection[fieldNameToMongo(fieldName)] = true;
     });
   }
-  return fields;
+  return projection;
 }
 
-export default class MongoCollection<T extends IDable> implements Collection<T> {
+export default class MongoCollection<T extends IDable> extends BaseCollection<T> {
   public constructor(
     private readonly collection: MCollection,
-    private readonly keys: DBKeys<T> = {},
+    keys: DBKeys<T> = {},
     private readonly stateRef: State = { closed: false },
   ) {
+    super(keys);
     Object.keys(keys).forEach((k) => {
       const keyName = k as keyof DBKeys<T>;
       const options = keys[keyName];
@@ -99,38 +101,36 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     });
   }
 
-  public async add(value: T): Promise<void> {
+  protected async internalAdd(value: T): Promise<void> {
     await this.getCollection().insertOne(convertToMongo(value));
   }
 
-  public async update<K extends keyof T & string>(
+  protected async internalUpsert(
+    id: T['id'],
+    update: Partial<T>,
+  ): Promise<void> {
+    await withUpsertRetry(() => this.getCollection().updateOne(
+      convertToMongo({ id }),
+      { $set: convertToMongo(update) },
+      { upsert: true },
+    ));
+  }
+
+  protected async internalUpdate<K extends keyof T & string>(
     keyName: K,
     key: T[K],
     value: Partial<T>,
-    { upsert = false } = {},
   ): Promise<void> {
-    if (upsert && keyName !== 'id') {
-      throw new Error(`Can only upsert by ID, not ${keyName}`);
-    }
-
-    this.checkIndexExists(keyName);
-
-    if (upsert) {
-      // special handling due to https://jira.mongodb.org/browse/SERVER-14322
-      await withUpsertRetry(() => this.getCollection().updateOne(
-        convertToMongo({ [keyName]: key }),
-        { $set: convertToMongo(value) },
-        { upsert: true },
-      ));
+    const query = convertToMongo({ [keyName]: key });
+    const update = { $set: convertToMongo(value) };
+    if (this.isIndexUnique(keyName)) {
+      await this.getCollection().updateOne(query, update);
     } else {
-      await this.getCollection().updateOne(
-        convertToMongo({ [keyName]: key }),
-        { $set: convertToMongo(value) },
-      );
+      await this.getCollection().updateMany(query, update);
     }
   }
 
-  public async get<
+  protected async internalGet<
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
@@ -138,16 +138,14 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     key: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
-    this.checkIndexExists(keyName);
-
     const raw = await this.getCollection().findOne(
       convertToMongo({ [keyName]: key }),
-      { projection: makeMongoFields(fields) },
+      { projection: makeMongoProjection(fields) },
     );
     return convertFromMongo<T>(raw);
   }
 
-  public async getAll<
+  protected async internalGetAll<
     K extends keyof T & string,
     F extends readonly (keyof T & string)[]
   >(
@@ -155,41 +153,25 @@ export default class MongoCollection<T extends IDable> implements Collection<T> 
     key?: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
+    const cursor = this.getCollection().find(
+      keyName ? convertToMongo({ [keyName]: key }) : {},
+      { projection: makeMongoProjection(fields) },
+    );
+
     const result: Pick<T, F[-1]>[] = [];
-
-    let cursor: MCursor;
-    const mFields = makeMongoFields(fields);
-    if (keyName) {
-      this.checkIndexExists(keyName);
-
-      cursor = this.getCollection().find(
-        convertToMongo({ [keyName]: key }),
-        { projection: mFields },
-      );
-    } else {
-      cursor = this.getCollection().find({}, { projection: mFields });
-    }
     await cursor.forEach((raw) => result.push(convertFromMongo<T>(raw)!));
 
     return result;
   }
 
-  public async remove<K extends keyof T & string>(
+  protected async internalRemove<K extends keyof T & string>(
     key: K,
     value: T[K],
   ): Promise<number> {
-    this.checkIndexExists(key);
-
     const result = await this.getCollection().deleteMany(
       convertToMongo({ [key]: value }),
     );
     return result.deletedCount || 0;
-  }
-
-  private checkIndexExists(key: string): void {
-    if (key !== 'id' && !(this.keys as any)[key]) {
-      throw new Error(`No index for ${key}`);
-    }
   }
 
   private getCollection(): MCollection {

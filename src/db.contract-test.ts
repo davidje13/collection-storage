@@ -370,15 +370,30 @@ export default ({ factory }: { factory: () => Promise<DB> | DB }): void => {
       expect(v2!.b).toEqual('updated');
     });
 
-    it('changes exactly one matching entry', async () => {
+    it('changes all matching entries', async () => {
       await col.update('idxs', '2', { b: 'updated' });
       const [v2, v3] = await runAll([
         col.get('id', '2'),
         col.get('id', '3'),
       ]);
-      const updated2 = (v2!.b === 'updated');
-      const updated3 = (v3!.b === 'updated');
-      expect(updated2).not.toEqual(updated3);
+      expect(v2!.b).toEqual('updated');
+      expect(v3!.b).toEqual('updated');
+    });
+
+    it('rejects conflicts from changing multiple records', async () => {
+      let capturedError = null;
+      try {
+        await col.update('idxs', '2', { a: 'multi' });
+      } catch (e) {
+        capturedError = e;
+      }
+      expect(capturedError).not.toEqual(null);
+      const [v2, v3] = await runAll([
+        col.get('id', '2'),
+        col.get('id', '3'),
+      ]);
+      expect(v2!.a).toEqual('A2');
+      expect(v3!.a).toEqual('A3');
     });
 
     it('leaves unspecified properties unchanged', async () => {
