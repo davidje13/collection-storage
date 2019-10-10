@@ -7,8 +7,6 @@ import { encodeHStore, decodeHStore } from './hstore';
 import { withIdentifiers, quoteValue } from './sql';
 
 const STATEMENTS = {
-  CREATE_HSTORE: 'CREATE EXTENSION IF NOT EXISTS hstore',
-
   CREATE_TABLE: [
     'CREATE TABLE IF NOT EXISTS $T (',
     'id TEXT NOT NULL PRIMARY KEY,',
@@ -36,6 +34,10 @@ const STATEMENTS = {
   DELETE_ID: 'DELETE FROM $T WHERE id=$1',
 };
 
+interface State {
+  closed: boolean;
+}
+
 async function configureTable(
   pool: PPool,
   tableName: string,
@@ -43,7 +45,6 @@ async function configureTable(
 ): Promise<void> {
   const c = await pool.connect();
   try {
-    await c.query(STATEMENTS.CREATE_HSTORE);
     await c.query(withIdentifiers(STATEMENTS.CREATE_TABLE, {
       T: tableName,
     }));
@@ -117,6 +118,7 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
     private readonly pool: PPool,
     name: string,
     keys: DBKeys<T> = {},
+    private readonly stateRef: State = { closed: false },
   ) {
     super(keys);
 
@@ -131,6 +133,12 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
       .catch((e) => {
         process.stderr.write(`Failed to prepare table ${name}: ${e}`);
       });
+  }
+
+  protected preAct(): void {
+    if (this.stateRef.closed) {
+      throw new Error('Connection closed');
+    }
   }
 
   protected async internalAdd({ id, ...rest }: T): Promise<void> {

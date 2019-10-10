@@ -4,7 +4,7 @@ import DB, { DBKeys } from '../interfaces/DB';
 import IDable from '../interfaces/IDable';
 
 export default class PostgresDb implements DB {
-  private closed = false;
+  private readonly stateRef = { closed: false };
 
   private constructor(
     private readonly pool: PPool,
@@ -13,6 +13,7 @@ export default class PostgresDb implements DB {
   public static async connect(url: string): Promise<PostgresDb> {
     const { Pool } = await import('pg');
     const pool = new Pool({ connectionString: url });
+    await pool.query('CREATE EXTENSION IF NOT EXISTS hstore');
     return new PostgresDb(pool);
   }
 
@@ -20,14 +21,14 @@ export default class PostgresDb implements DB {
     name: string,
     keys?: DBKeys<T>,
   ): PostgresCollection<T> {
-    return new PostgresCollection(this.pool, name, keys);
+    return new PostgresCollection(this.pool, name, keys, this.stateRef);
   }
 
   public close(): Promise<void> {
-    if (this.closed) {
+    if (this.stateRef.closed) {
       return Promise.resolve();
     }
-    this.closed = true;
+    this.stateRef.closed = true;
     return this.pool.end();
   }
 

@@ -55,12 +55,12 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
       if (searchAttribute !== 'id') {
         throw new Error(`Can only upsert by ID, not ${searchAttribute}`);
       }
-      await this.preAct();
       let withoutId = update;
       if (Object.prototype.hasOwnProperty.call(update, 'id')) {
         withoutId = { ...update };
         delete withoutId.id;
       }
+      await this.preAct();
       return this.internalUpsert(searchValue as T['id'], withoutId, options);
     }
     if (!this.isIndexed(searchAttribute)) {
