@@ -24,3 +24,4 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
     private rawByKeyKeepWatches;
     private getAndWatchBySerialisedKey;
 }
+//# sourceMappingURL=RedisCollection.d.ts.map

@@ -4,3 +4,4 @@ export interface IDableBy<ID extends IDType> {
 }
 declare type IDable = IDableBy<IDType>;
 export default IDable;
+//# sourceMappingURL=IDable.d.ts.map

@@ -5,3 +5,4 @@ export default interface Encryption<EncT, KeyT, SerialisedKeyT> {
     serialiseKey(key: KeyT): SerialisedKeyT;
     deserialiseKey(data: SerialisedKeyT): KeyT;
 }
+//# sourceMappingURL=Encryption.d.ts.map

@@ -13,3 +13,4 @@ export declare type ExtendedRedis<I> = I & RedisWithExtendedPipeline<I>;
 export declare function multiExec(client: Redis, commands: string[][]): Promise<[unknown, any][] | null>;
 export declare function minifyLuaScript(lines: string[], ...argNames: string[]): string;
 export {};
+//# sourceMappingURL=helpers.d.ts.map

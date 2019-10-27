@@ -18,3 +18,4 @@ export { default as LruCache } from './helpers/LruCache';
 export { WrappedCollection, encryptByKey, encryptByRecord, encryptByRecordWithMasterKey, };
 export { default as nodeEncryptionSync, } from './wrappers/encryption/nodeEncryptionSync';
 export default CollectionStorage;
+//# sourceMappingURL=index.d.ts.map

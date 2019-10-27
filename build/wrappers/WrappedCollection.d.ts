@@ -23,3 +23,4 @@ export default class WrappedCollection<T extends IDable, WF extends readonly (ke
     private wrapAll;
     private unwrapAll;
 }
+//# sourceMappingURL=WrappedCollection.d.ts.map

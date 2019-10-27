@@ -9,3 +9,4 @@ export interface ScriptExtensions {
 }
 export declare type ERedis = ExtendedRedis<ScriptExtensions>;
 export default function defineAllScripts(client: Redis): Promise<ERedis>;
+//# sourceMappingURL=scripts.d.ts.map

@@ -7,3 +7,4 @@ export default class LruCache<K, V> {
     remove(key: K): void;
     private flush;
 }
+//# sourceMappingURL=LruCache.d.ts.map

@@ -7,3 +7,4 @@ export default interface DB {
     getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): Collection<T>;
     close(): Promise<void> | void;
 }
+//# sourceMappingURL=DB.d.ts.map

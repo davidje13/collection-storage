@@ -11,3 +11,4 @@ export default class PostgresDb implements DB {
     close(): Promise<void>;
     getConnectionPool(): PPool;
 }
+//# sourceMappingURL=PostgresDb.d.ts.map

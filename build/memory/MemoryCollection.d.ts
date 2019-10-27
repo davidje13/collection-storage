@@ -22,3 +22,4 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
     private internalRemoveIndices;
 }
 export {};
+//# sourceMappingURL=MemoryCollection.d.ts.map

@@ -10,3 +10,4 @@ export default class RedisDb implements DB {
     close(): Promise<void>;
     getConnectionPool(): RedisConnectionPool;
 }
+//# sourceMappingURL=RedisDb.d.ts.map

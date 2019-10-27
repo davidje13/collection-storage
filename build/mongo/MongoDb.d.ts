@@ -11,3 +11,4 @@ export default class MongoDb implements DB {
     close(): Promise<void>;
     getDb(): MDb;
 }
+//# sourceMappingURL=MongoDb.d.ts.map

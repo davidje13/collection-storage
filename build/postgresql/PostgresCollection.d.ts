@@ -22,3 +22,4 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
     private runTableQuery;
 }
 export {};
+//# sourceMappingURL=PostgresCollection.d.ts.map

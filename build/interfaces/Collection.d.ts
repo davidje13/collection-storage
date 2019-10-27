@@ -15,3 +15,4 @@ export default interface Collection<T extends IDable> {
     update<K extends keyof T & string>(searchAttribute: K, searchValue: T[K], update: Partial<T>, options?: UpdateOptions): Promise<void>;
     remove<K extends keyof T & string>(searchAttribute: K, searchValue: T[K]): Promise<number>;
 }
+//# sourceMappingURL=Collection.d.ts.map

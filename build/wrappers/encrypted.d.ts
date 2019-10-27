@@ -16,3 +16,4 @@ declare function encryptByRecord<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
 declare function encryptByRecordWithMasterKey<ID extends IDType>(sMasterKey: Buffer, keyCollection: Collection<KeyRecord<ID, Buffer>>, cacheSize?: number): Encrypter<Buffer, ID>;
 declare function encryptByRecordWithMasterKey<ID extends IDType, EncT, KeyT, SerialisedKeyT>(sMasterKey: SerialisedKeyT, keyCollection: Collection<KeyRecord<ID, EncT>>, cacheSize: number, cr: Encryption<EncT, KeyT, SerialisedKeyT>): Encrypter<EncT, ID>;
 export { encryptByKey, encryptByRecord, encryptByRecordWithMasterKey, };
+//# sourceMappingURL=encrypted.d.ts.map

@@ -19,3 +19,4 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     protected abstract internalUpdate<K extends keyof T & string>(searchAttribute: K, searchValue: T[K], update: Partial<T>, options: UpdateOptions): Promise<void>;
     protected abstract internalRemove<K extends keyof T & string>(searchAttribute: K, searchValue: T[K]): Promise<number>;
 }
+//# sourceMappingURL=BaseCollection.d.ts.map

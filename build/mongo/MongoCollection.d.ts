@@ -18,3 +18,4 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
     private getCollection;
 }
 export {};
+//# sourceMappingURL=MongoCollection.d.ts.map
