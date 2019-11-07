@@ -93,7 +93,7 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
       const keyName = k as keyof DBKeys<T>;
       const options = keys[keyName];
       const mongoKey = fieldNameToMongo(keyName);
-      if (options && options.unique) {
+      if (options?.unique) {
         collection.createIndex({ [mongoKey]: 1 }, { unique: true });
       } else {
         collection.createIndex({ [mongoKey]: 'hashed' });

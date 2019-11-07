@@ -34,25 +34,25 @@
   "homepage": "https://github.com/davidje13/collection-storage#readme",
   "dependencies": {
     "@types/ioredis": "^4.0.18",
-    "@types/mongodb": "^3.3.6",
+    "@types/mongodb": "^3.3.9",
     "@types/pg": "^7.11.2"
   },
   "devDependencies": {
     "@neutrinojs/airbnb-base": "^9.0.0-rc.4",
     "@neutrinojs/jest": "^9.0.0-rc.4",
     "@neutrinojs/library": "^9.0.0-rc.4",
-    "@types/jest": "^24.0.18",
+    "@types/jest": "^24.0.22",
     "babel-plugin-transform-dynamic-import": "^2.1.0",
-    "eslint": "^6.5.1",
+    "eslint": "^6.6.0",
     "ioredis": "^4.14.1",
     "jest": "^24.9.0",
-    "mongodb": "^3.3.2",
+    "mongodb": "^3.3.3",
     "neutrino": "^9.0.0-rc.4",
-    "neutrino-typescript": "git+https://github.com/davidje13/neutrino-typescript#semver:^1.0.6",
-    "neutrino-typescript-eslint": "git+https://github.com/davidje13/neutrino-typescript-eslint#semver:^1.0.1",
+    "neutrino-typescript": "git+https://github.com/davidje13/neutrino-typescript#semver:^1.0.8",
+    "neutrino-typescript-eslint": "git+https://github.com/davidje13/neutrino-typescript-eslint#semver:^1.0.2",
     "pg": "^7.12.1",
-    "typescript": "^3.6.3",
-    "webpack": "^4.41.0",
-    "webpack-cli": "^3.3.9"
+    "typescript": "^3.7.2",
+    "webpack": "^4.41.2",
+    "webpack-cli": "^3.3.10"
   }
 }

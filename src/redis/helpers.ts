@@ -1,7 +1,7 @@
 import { Redis, Pipeline, MultiOptions } from 'ioredis';
 
 // Thanks, https://stackoverflow.com/a/50014868/1180785
-type ArgumentTypes<T> = T extends (...args: infer U) => any ? U: never;
+type ArgumentTypes<T> = T extends (...args: infer U) => any ? U : never;
 
 type PipelineVersions<I> = {
   [K in keyof I]: (...args: ArgumentTypes<I[K]>) => Pipeline & PipelineVersions<I>;

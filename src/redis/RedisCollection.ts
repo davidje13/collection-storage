@@ -152,7 +152,7 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
         return null;
       }
       const results = await this.getByKeysKeepWatches(client, [sId], returnAttributes);
-      return results[0] || null;
+      return results[0] ?? null;
     }, unwatchAll);
   }
 

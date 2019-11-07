@@ -35,9 +35,7 @@ export default class RedisConnectionPool {
     try {
       return await fn(c);
     } finally {
-      if (teardown) {
-        await teardown(c);
-      }
+      await teardown?.(c);
       this.returnConnection(c);
     }
   }
@@ -101,8 +99,8 @@ export default class RedisConnectionPool {
     } else {
       this.inUse -= 1;
       this.connections.push(c);
-      if (this.closingFn && this.inUse === 0) {
-        this.closingFn();
+      if (this.inUse === 0) {
+        this.closingFn?.();
       }
     }
   }

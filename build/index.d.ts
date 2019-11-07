@@ -1,16 +1,16 @@
 /// <reference types="node" />
 import CollectionStorage from './CollectionStorage';
-import WrappedCollection, { Wrapped } from './wrappers/WrappedCollection';
-import Encryption from './wrappers/encryption/Encryption';
+import WrappedCollection, { Wrapped as TypeWrapped } from './wrappers/WrappedCollection';
+import TypeEncryption from './wrappers/encryption/Encryption';
 import { encryptByKey, encryptByRecord, encryptByRecordWithMasterKey } from './wrappers/encrypted';
-import DB from './interfaces/DB';
-import Collection from './interfaces/Collection';
+import TypeDB from './interfaces/DB';
+import TypeCollection from './interfaces/Collection';
 import IDable from './interfaces/IDable';
-export declare type DB = DB;
-export declare type Collection<T extends IDable> = Collection<T>;
-export declare type Wrapped<T extends IDable, WF extends keyof T, W> = Wrapped<T, WF, W>;
-export declare type Encrypted<T extends IDable, WF extends keyof T> = Wrapped<T, WF, Buffer>;
-export declare type Encryption<EncT, KeyT, SerialisedKeyT> = Encryption<EncT, KeyT, SerialisedKeyT>;
+export declare type DB = TypeDB;
+export declare type Collection<T extends IDable> = TypeCollection<T>;
+export declare type Wrapped<T extends IDable, WF extends keyof T, W> = TypeWrapped<T, WF, W>;
+export declare type Encrypted<T extends IDable, WF extends keyof T> = TypeWrapped<T, WF, Buffer>;
+export declare type Encryption<EncT, KeyT, SerialisedKeyT> = TypeEncryption<EncT, KeyT, SerialisedKeyT>;
 export { default as MemoryDb } from './memory/MemoryDb';
 export { default as MongoDb } from './mongo/MongoDb';
 export { default as RedisDb } from './redis/RedisDb';

@@ -115,7 +115,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
     const all = await this.internalGetAll(searchAttribute, searchValue, returnAttributes);
-    return (all.length > 0) ? all[0] : null;
+    return all[0] ?? null;
   }
 
   protected internalUpsert(

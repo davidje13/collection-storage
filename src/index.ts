@@ -1,23 +1,24 @@
 import CollectionStorage from './CollectionStorage';
-import WrappedCollection, { Wrapped } from './wrappers/WrappedCollection';
-import Encryption from './wrappers/encryption/Encryption';
+import WrappedCollection, { Wrapped as TypeWrapped } from './wrappers/WrappedCollection';
+import TypeEncryption from './wrappers/encryption/Encryption';
 import {
   encryptByKey,
   encryptByRecord,
   encryptByRecordWithMasterKey,
 } from './wrappers/encrypted';
-import DB from './interfaces/DB';
-import Collection from './interfaces/Collection';
+import TypeDB from './interfaces/DB';
+import TypeCollection from './interfaces/Collection';
 import IDable from './interfaces/IDable';
 
-export type DB = DB;
-export type Collection<T extends IDable> = Collection<T>;
+// https://github.com/microsoft/TypeScript/issues/34750
+export type DB = TypeDB;
+export type Collection<T extends IDable> = TypeCollection<T>;
 export type Wrapped<T extends IDable, WF extends keyof T, W> =
-  Wrapped<T, WF, W>;
+  TypeWrapped<T, WF, W>;
 export type Encrypted<T extends IDable, WF extends keyof T> =
-  Wrapped<T, WF, Buffer>;
+  TypeWrapped<T, WF, Buffer>;
 export type Encryption<EncT, KeyT, SerialisedKeyT> =
-  Encryption<EncT, KeyT, SerialisedKeyT>;
+  TypeEncryption<EncT, KeyT, SerialisedKeyT>;
 
 export { default as MemoryDb } from './memory/MemoryDb';
 export { default as MongoDb } from './mongo/MongoDb';
