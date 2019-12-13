@@ -38,6 +38,7 @@ interface ConfigT {
 
 const nop = (): void => undefined;
 
+// eslint-disable-next-line jest/no-export
 export default ({
   beforeAll: beforeAllFn = nop,
   factory,

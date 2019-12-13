@@ -1,4 +1,6 @@
-import { Redis, Pipeline, MultiOptions } from 'ioredis';
+declare type Redis = import('ioredis').Redis;
+declare type Pipeline = import('ioredis').Pipeline;
+declare type MultiOptions = import('ioredis').MultiOptions;
 declare type ArgumentTypes<T> = T extends (...args: infer U) => any ? U : never;
 declare type PipelineVersions<I> = {
     [K in keyof I]: (...args: ArgumentTypes<I[K]>) => Pipeline & PipelineVersions<I>;

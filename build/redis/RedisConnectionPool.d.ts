@@ -1,6 +1,7 @@
-import IORedis from 'ioredis';
 import { ERedis } from './scripts';
-declare type RS = new (host?: string, options?: IORedis.RedisOptions) => IORedis.Redis;
+declare type RedisOptions = import('ioredis').RedisOptions;
+declare type Redis = import('ioredis').Redis;
+declare type RS = new (host?: string, options?: RedisOptions) => Redis;
 export default class RedisConnectionPool {
     private readonly RedisStatic;
     private readonly url;
@@ -11,7 +12,7 @@ export default class RedisConnectionPool {
     private queue;
     private closingFn?;
     private closed;
-    constructor(RedisStatic: RS, url: string, options: IORedis.RedisOptions, maxConnections: number);
+    constructor(RedisStatic: RS, url: string, options: RedisOptions, maxConnections: number);
     withConnection<T>(fn: (c: ERedis) => Promise<T> | T, teardown?: (c: ERedis) => Promise<void> | void): Promise<T>;
     retryWithConnection<T>(fn: (c: ERedis) => Promise<T> | T, teardown?: (c: ERedis) => Promise<void> | void): Promise<T>;
     close(): Promise<void>;

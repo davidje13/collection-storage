@@ -1,7 +1,7 @@
-import { Pool as PPool } from 'pg';
 import IDable from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
 import { DBKeys } from '../interfaces/DB';
+declare type PPool = import('pg').Pool;
 interface State {
     closed: boolean;
 }

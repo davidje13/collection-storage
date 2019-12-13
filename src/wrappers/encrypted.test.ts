@@ -425,6 +425,7 @@ describe('encryption', () => {
       expect(value[0].encrypted).toEqual(9);
     });
 
+    /* eslint-disable-next-line jest/expect-expect */ // this test is mostly compilation
     it('infers types', async () => {
       const db = await CollectionStorage.connect('memory://');
       encryptByRecordWithMasterKey(

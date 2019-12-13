@@ -1,14 +1,13 @@
-import { Db as MDb } from 'mongodb';
-import MongoCollection from './MongoCollection';
 import DB, { DBKeys } from '../interfaces/DB';
 import IDable from '../interfaces/IDable';
 export default class MongoDb implements DB {
     private readonly client;
+    private readonly MongoCollection;
     private readonly stateRef;
     private constructor();
     static connect(url: string): Promise<MongoDb>;
-    getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): MongoCollection<T>;
+    getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): import('./MongoCollection').default<T>;
     close(): Promise<void>;
-    getDb(): MDb;
+    getDb(): import('mongodb').Db;
 }
 //# sourceMappingURL=MongoDb.d.ts.map

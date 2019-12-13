@@ -1,4 +1,6 @@
-import { Redis, Pipeline, MultiOptions } from 'ioredis';
+type Redis = import('ioredis').Redis;
+type Pipeline = import('ioredis').Pipeline;
+type MultiOptions = import('ioredis').MultiOptions;
 
 // Thanks, https://stackoverflow.com/a/50014868/1180785
 type ArgumentTypes<T> = T extends (...args: infer U) => any ? U : never;

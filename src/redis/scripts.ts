@@ -1,4 +1,3 @@
-import { Redis } from 'ioredis';
 import { minifyLuaScript, ExtendedRedis } from './helpers';
 
 export interface ScriptExtensions {
@@ -70,14 +69,14 @@ const SCRIPT_REMOVE = minifyLuaScript([
   'end',
 ], 'id');
 
-export default async function defineAllScripts(
-  client: Redis,
-): Promise<ERedis> {
-  await client.defineCommand('add', { lua: SCRIPT_ADD });
-  await client.defineCommand('update', { lua: SCRIPT_UPDATE });
-  await client.defineCommand('checkUpdate', { lua: SCRIPT_CHECK_UPDATE });
-  await client.defineCommand('updateWithoutCheck', { lua: SCRIPT_UPDATE_WITHOUT_CHECK });
-  await client.defineCommand('remove', { lua: SCRIPT_REMOVE });
+export default function defineAllScripts(
+  client: import('ioredis').Redis,
+): ERedis {
+  client.defineCommand('add', { lua: SCRIPT_ADD });
+  client.defineCommand('update', { lua: SCRIPT_UPDATE });
+  client.defineCommand('checkUpdate', { lua: SCRIPT_CHECK_UPDATE });
+  client.defineCommand('updateWithoutCheck', { lua: SCRIPT_UPDATE_WITHOUT_CHECK });
+  client.defineCommand('remove', { lua: SCRIPT_REMOVE });
 
   return client as ERedis;
 }

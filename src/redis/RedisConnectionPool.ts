@@ -1,8 +1,9 @@
-import IORedis from 'ioredis';
 import defineAllScripts, { ERedis } from './scripts';
 import retry from '../helpers/retry';
 
-type RS = new(host?: string, options?: IORedis.RedisOptions) => IORedis.Redis;
+type RedisOptions = import('ioredis').RedisOptions;
+type Redis = import('ioredis').Redis;
+type RS = new(host?: string, options?: RedisOptions) => Redis;
 
 const withRetry = retry((e) => (
   typeof e === 'object' &&
@@ -23,7 +24,7 @@ export default class RedisConnectionPool {
   public constructor(
     private readonly RedisStatic: RS,
     private readonly url: string,
-    private readonly options: IORedis.RedisOptions,
+    private readonly options: RedisOptions,
     private readonly maxConnections: number,
   ) {}
 

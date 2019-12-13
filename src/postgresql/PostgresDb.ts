@@ -1,4 +1,3 @@
-import { Pool as PPool } from 'pg';
 import PostgresCollection from './PostgresCollection';
 import DB, { DBKeys } from '../interfaces/DB';
 import IDable from '../interfaces/IDable';
@@ -7,7 +6,7 @@ export default class PostgresDb implements DB {
   private readonly stateRef = { closed: false };
 
   private constructor(
-    private readonly pool: PPool,
+    private readonly pool: import('pg').Pool,
   ) {}
 
   public static async connect(url: string): Promise<PostgresDb> {
@@ -32,7 +31,7 @@ export default class PostgresDb implements DB {
     return this.pool.end();
   }
 
-  public getConnectionPool(): PPool {
+  public getConnectionPool(): import('pg').Pool {
     return this.pool;
   }
 }

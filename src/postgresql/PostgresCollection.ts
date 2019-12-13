@@ -1,10 +1,12 @@
-import { Pool as PPool, QueryArrayResult } from 'pg';
 import IDable from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
 import { DBKeys } from '../interfaces/DB';
 import { serialiseValue, deserialiseValue, serialiseRecord } from '../helpers/serialiser';
 import { encodeHStore, decodeHStore } from './hstore';
 import { withIdentifiers, quoteValue } from './sql';
+
+type PPool = import('pg').Pool;
+type QueryArrayResult<R> = import('pg').QueryArrayResult<R>;
 
 const STATEMENTS = {
   CREATE_TABLE: [

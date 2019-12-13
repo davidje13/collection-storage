@@ -59,6 +59,7 @@ module.exports = {
             // database connectors are optional peer dependencies
             'devDependencies': true,
           }],
+          'import/extensions': ['error', 'never'],
         },
       },
     }),
