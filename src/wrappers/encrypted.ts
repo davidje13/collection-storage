@@ -1,9 +1,9 @@
-import IDable, { IDableBy, IDType } from '../interfaces/IDable';
-import Collection from '../interfaces/Collection';
+import type { IDable, IDableBy, IDType } from '../interfaces/IDable';
+import type { Collection } from '../interfaces/Collection';
 import LruCache from '../helpers/LruCache';
 import { serialiseValue, deserialiseValue } from '../helpers/serialiser';
 import WrappedCollection, { Wrapped } from './WrappedCollection';
-import Encryption from './encryption/Encryption';
+import type Encryption from './encryption/Encryption';
 import nodeEncryptionSync from './encryption/nodeEncryptionSync';
 
 export interface KeyRecord<ID extends IDType, KeyT> {

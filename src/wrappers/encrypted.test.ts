@@ -5,10 +5,10 @@ import {
   encryptByRecordWithMasterKey,
   KeyRecord,
 } from './encrypted';
-import { Wrapped } from './WrappedCollection';
+import type { Wrapped } from './WrappedCollection';
 import CollectionStorage from '../CollectionStorage';
-import Collection from '../interfaces/Collection';
-import IDable from '../interfaces/IDable';
+import type { Collection } from '../interfaces/Collection';
+import type { IDable } from '../interfaces/IDable';
 
 interface TestType {
   id: string;

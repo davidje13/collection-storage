@@ -1,15 +1,15 @@
-import IDable from '../interfaces/IDable';
+import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
-import { UpdateOptions } from '../interfaces/Collection';
-import { DBKeys } from '../interfaces/DB';
+import type { UpdateOptions } from '../interfaces/Collection';
+import type { DBKeys } from '../interfaces/DB';
 import {
   serialiseValue,
   serialiseRecord,
   deserialiseRecord,
 } from '../helpers/serialiser';
-import RedisConnectionPool from './RedisConnectionPool';
+import type RedisConnectionPool from './RedisConnectionPool';
 import { multiExec } from './helpers';
-import { ERedis } from './scripts';
+import type { ERedis } from './scripts';
 
 interface Key<T> {
   key: keyof T & string;

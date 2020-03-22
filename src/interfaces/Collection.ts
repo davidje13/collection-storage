@@ -1,4 +1,4 @@
-import IDable from './IDable';
+import type { IDable } from './IDable';
 
 export interface KeyOptions {
   unique?: boolean;
@@ -8,7 +8,7 @@ export interface UpdateOptions {
   upsert?: boolean;
 }
 
-export default interface Collection<T extends IDable> {
+export interface Collection<T extends IDable> {
   add(entry: T): Promise<void>;
 
   get<K extends keyof T & string>(

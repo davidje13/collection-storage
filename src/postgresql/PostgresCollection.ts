@@ -1,12 +1,10 @@
-import IDable from '../interfaces/IDable';
+import type { Pool as PgPoolT, QueryArrayResult as PgQueryArrayResultT } from 'pg';
+import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
-import { DBKeys } from '../interfaces/DB';
+import type { DBKeys } from '../interfaces/DB';
 import { serialiseValue, deserialiseValue, serialiseRecord } from '../helpers/serialiser';
 import { encodeHStore, decodeHStore } from './hstore';
 import { withIdentifiers, quoteValue } from './sql';
-
-type PPool = import('pg').Pool;
-type QueryArrayResult<R> = import('pg').QueryArrayResult<R>;
 
 const STATEMENTS = {
   CREATE_TABLE: [
@@ -41,7 +39,7 @@ interface State {
 }
 
 async function configureTable(
-  pool: PPool,
+  pool: PgPoolT,
   tableName: string,
   keys: DBKeys<any> = {},
 ): Promise<void> {
@@ -117,7 +115,7 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
   private pending?: (() => void)[] = [];
 
   public constructor(
-    private readonly pool: PPool,
+    private readonly pool: PgPoolT,
     name: string,
     keys: DBKeys<T> = {},
     private readonly stateRef: State = { closed: false },
@@ -227,7 +225,7 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
   private async runTableQuery(
     queryName: keyof typeof STATEMENTS,
     ...values: any[]
-  ): Promise<QueryArrayResult<any[]>> {
+  ): Promise<PgQueryArrayResultT<any[]>> {
     if (this.pending) {
       await new Promise((resolve): void => {
         this.pending!.push(resolve);

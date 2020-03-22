@@ -1,8 +1,8 @@
 /// <reference types="node" />
-import { IDableBy, IDType } from '../interfaces/IDable';
-import Collection from '../interfaces/Collection';
+import type { IDableBy, IDType } from '../interfaces/IDable';
+import type { Collection } from '../interfaces/Collection';
 import { Wrapped } from './WrappedCollection';
-import Encryption from './encryption/Encryption';
+import type Encryption from './encryption/Encryption';
 export interface KeyRecord<ID extends IDType, KeyT> {
     id: ID;
     key: KeyT;

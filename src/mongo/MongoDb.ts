@@ -1,5 +1,7 @@
-import DB, { DBKeys } from '../interfaces/DB';
-import IDable from '../interfaces/IDable';
+import type { Db as MongoDbT, MongoClient as MongoClientT } from 'mongodb';
+import type { DB, DBKeys } from '../interfaces/DB';
+import type { IDable } from '../interfaces/IDable';
+import type MongoCollectionT from './MongoCollection';
 
 function escapeName(name: string): string {
   return encodeURIComponent(name);
@@ -9,8 +11,8 @@ export default class MongoDb implements DB {
   private readonly stateRef = { closed: false };
 
   private constructor(
-    private readonly client: import('mongodb').MongoClient,
-    private readonly MongoCollection: typeof import('./MongoCollection').default,
+    private readonly client: MongoClientT,
+    private readonly MongoCollection: typeof MongoCollectionT,
   ) {}
 
   public static async connect(url: string): Promise<MongoDb> {
@@ -28,7 +30,7 @@ export default class MongoDb implements DB {
   public getCollection<T extends IDable>(
     name: string,
     keys?: DBKeys<T>,
-  ): import('./MongoCollection').default<T> {
+  ): MongoCollectionT<T> {
     const collection = this.client.db().collection(escapeName(name));
     return new this.MongoCollection(collection, keys, this.stateRef);
   }
@@ -38,7 +40,7 @@ export default class MongoDb implements DB {
     return this.client.close();
   }
 
-  public getDb(): import('mongodb').Db {
+  public getDb(): MongoDbT {
     return this.client.db();
   }
 }

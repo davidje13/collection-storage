@@ -1,5 +1,5 @@
-import DB from './interfaces/DB';
-import Collection from './interfaces/Collection';
+import type { DB } from './interfaces/DB';
+import type { Collection } from './interfaces/Collection';
 
 interface TestType {
   id: string;

@@ -1,22 +1,18 @@
 import CollectionStorage from './CollectionStorage';
-import WrappedCollection, { Wrapped as TypeWrapped } from './wrappers/WrappedCollection';
-import TypeEncryption from './wrappers/encryption/Encryption';
+import WrappedCollection, { Wrapped } from './wrappers/WrappedCollection';
+import type TypeEncryption from './wrappers/encryption/Encryption';
 import {
   encryptByKey,
   encryptByRecord,
   encryptByRecordWithMasterKey,
 } from './wrappers/encrypted';
-import TypeDB from './interfaces/DB';
-import TypeCollection from './interfaces/Collection';
-import IDable from './interfaces/IDable';
+import type { DB } from './interfaces/DB';
+import type { Collection } from './interfaces/Collection';
+import type { IDable } from './interfaces/IDable';
 
-// https://github.com/microsoft/TypeScript/issues/34750
-export type DB = TypeDB;
-export type Collection<T extends IDable> = TypeCollection<T>;
-export type Wrapped<T extends IDable, WF extends keyof T, W> =
-  TypeWrapped<T, WF, W>;
+export type { DB, Collection, Wrapped };
 export type Encrypted<T extends IDable, WF extends keyof T> =
-  TypeWrapped<T, WF, Buffer>;
+  Wrapped<T, WF, Buffer>;
 export type Encryption<EncT, KeyT, SerialisedKeyT> =
   TypeEncryption<EncT, KeyT, SerialisedKeyT>;
 

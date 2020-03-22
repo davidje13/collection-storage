@@ -1,5 +1,5 @@
 import crypto, { KeyObject } from 'crypto';
-import Encryption from './Encryption';
+import type Encryption from './Encryption';
 
 const ALG = 'aes-256-cbc';
 const ALG_BUF = Buffer.from(`${ALG}:`, 'utf8');

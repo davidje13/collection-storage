@@ -2,7 +2,7 @@ import MemoryDb from './memory/MemoryDb';
 import MongoDb from './mongo/MongoDb';
 import RedisDb from './redis/RedisDb';
 import PostgresDb from './postgresql/PostgresDb';
-import DB from './interfaces/DB';
+import type { DB } from './interfaces/DB';
 
 export default class CollectionStorage {
   public static async connect(url: string): Promise<DB> {

@@ -1,6 +1,6 @@
-import Collection, { UpdateOptions } from './Collection';
-import IDable from './IDable';
-import { DBKeys } from './DB';
+import type { Collection, UpdateOptions } from './Collection';
+import type { IDable } from './IDable';
+import type { DBKeys } from './DB';
 
 export default abstract class BaseCollection<T extends IDable> implements Collection<T> {
   protected constructor(

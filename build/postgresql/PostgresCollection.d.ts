@@ -1,7 +1,7 @@
-import IDable from '../interfaces/IDable';
+import type { Pool as PgPoolT } from 'pg';
+import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
-import { DBKeys } from '../interfaces/DB';
-declare type PPool = import('pg').Pool;
+import type { DBKeys } from '../interfaces/DB';
 interface State {
     closed: boolean;
 }
@@ -11,7 +11,7 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
     private readonly tableName;
     private readonly cachedQueries;
     private pending?;
-    constructor(pool: PPool, name: string, keys?: DBKeys<T>, stateRef?: State);
+    constructor(pool: PgPoolT, name: string, keys?: DBKeys<T>, stateRef?: State);
     protected preAct(): void;
     protected internalAdd({ id, ...rest }: T): Promise<void>;
     protected internalUpsert(id: T['id'], update: Partial<T>): Promise<void>;

@@ -1,8 +1,8 @@
-import IDable from '../interfaces/IDable';
+import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
-import { UpdateOptions } from '../interfaces/Collection';
-import { DBKeys } from '../interfaces/DB';
-import RedisConnectionPool from './RedisConnectionPool';
+import type { UpdateOptions } from '../interfaces/Collection';
+import type { DBKeys } from '../interfaces/DB';
+import type RedisConnectionPool from './RedisConnectionPool';
 export default class RedisCollection<T extends IDable> extends BaseCollection<T> {
     private readonly pool;
     private readonly prefix;

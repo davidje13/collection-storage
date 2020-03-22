@@ -1,6 +1,6 @@
 import MemoryCollection from './MemoryCollection';
-import DB, { DBKeys } from '../interfaces/DB';
-import IDable from '../interfaces/IDable';
+import type { DB, DBKeys } from '../interfaces/DB';
+import type { IDable } from '../interfaces/IDable';
 export default class MemoryDb implements DB {
     private readonly simulatedLatency;
     private readonly mapTables;

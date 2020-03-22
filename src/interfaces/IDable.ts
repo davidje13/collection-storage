@@ -5,5 +5,4 @@ export interface IDableBy<ID extends IDType> {
   id: ID;
 }
 
-type IDable = IDableBy<IDType>;
-export default IDable;
+export type IDable = IDableBy<IDType>;

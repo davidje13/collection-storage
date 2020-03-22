@@ -2,9 +2,9 @@ import {
   Collection as MCollection,
   Binary as MBinary,
 } from 'mongodb';
-import IDable from '../interfaces/IDable';
+import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
-import { DBKeys } from '../interfaces/DB';
+import type { DBKeys } from '../interfaces/DB';
 import retry from '../helpers/retry';
 
 const MONGO_ID = '_id';

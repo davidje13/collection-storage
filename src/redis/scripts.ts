@@ -1,3 +1,4 @@
+import type { Redis as RedisT } from 'ioredis';
 import { minifyLuaScript, ExtendedRedis } from './helpers';
 
 export interface ScriptExtensions {
@@ -69,9 +70,7 @@ const SCRIPT_REMOVE = minifyLuaScript([
   'end',
 ], 'id');
 
-export default function defineAllScripts(
-  client: import('ioredis').Redis,
-): ERedis {
+export default function defineAllScripts(client: RedisT): ERedis {
   client.defineCommand('add', { lua: SCRIPT_ADD });
   client.defineCommand('update', { lua: SCRIPT_UPDATE });
   client.defineCommand('checkUpdate', { lua: SCRIPT_CHECK_UPDATE });
