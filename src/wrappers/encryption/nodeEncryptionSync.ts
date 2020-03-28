@@ -22,7 +22,7 @@ const nodeEncryptionSync: Encryption<Buffer, KeyObject, Buffer> = {
     const iv = v.slice(ALG_BUF.length, ALG_BUF.length + IV_LEN);
     const encrypted = v.slice(ALG_BUF.length + IV_LEN);
 
-    const decipher = crypto.createDecipheriv(ALG, key as any, iv);
+    const decipher = crypto.createDecipheriv(ALG, key, iv);
     let decrypted = decipher.update(encrypted, undefined, 'utf8');
     decrypted += decipher.final('utf8');
 

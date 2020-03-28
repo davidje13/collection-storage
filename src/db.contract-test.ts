@@ -10,18 +10,21 @@ interface TestType {
   b?: string;
 }
 
-async function runAll<T>(promises: Promise<T>[]): Promise<T[]> {
-  // https://github.com/microsoft/TypeScript/issues/31083
-  const results = await (Promise as any).allSettled(promises);
+function isRejected<T>(r: PromiseSettledResult<T>): r is PromiseRejectedResult {
+  return r.status === 'rejected';
+}
 
-  const failures = results.filter((r: any) => r.status === 'rejected');
+async function runAll<T>(promises: Promise<T>[]): Promise<T[]> {
+  const results = await Promise.allSettled(promises);
+
+  const failures = results.filter(isRejected);
   if (failures.length > 0) {
     const description = failures
-      .map((r: any) => r.reason)
+      .map((r) => r.reason)
       .join(', ');
     throw new Error(`Parallel tasks failed: ${description}`);
   }
-  return results.map((r: any) => r.value);
+  return (results as PromiseFulfilledResult<T>[]).map((r) => r.value);
 }
 
 function getUniqueName(): string {
