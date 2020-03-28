@@ -1,7 +1,7 @@
 import type { Db as MongoDbT } from 'mongodb';
 import type { DB, DBKeys } from '../interfaces/DB';
 import type { IDable } from '../interfaces/IDable';
-import type { MongoCollection as MongoCollectionT } from './MongoCollection';
+import type MongoCollectionT from './MongoCollection';
 export default class MongoDb implements DB {
     private readonly client;
     private readonly MongoCollection;
