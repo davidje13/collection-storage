@@ -64,7 +64,7 @@ module.exports = {
       },
     }),
     library({
-      name: 'websocket-express',
+      name: 'collection-storage',
       target: 'node',
       babel: {
         presets: [
