@@ -103,7 +103,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     );
   }
 
-  // eslint-disable-next-line class-methods-use-this, @typescript-eslint/no-empty-function
+  // eslint-disable-next-line class-methods-use-this
   protected preAct(): Promise<void> | void {}
 
   protected async internalGet<
