@@ -1,25 +1,26 @@
 import type {
-  Redis as RedisT,
-  Pipeline as PipelineT,
-  MultiOptions as MultiOptionsT,
+  Redis,
+  Pipeline,
+  MultiOptions,
+  Ok,
 } from 'ioredis';
 
 // Thanks, https://stackoverflow.com/a/50014868/1180785
 type ArgumentTypes<T> = T extends (...args: infer U) => any ? U : never;
 
 type PipelineVersions<I> = {
-  [K in keyof I]: (...args: ArgumentTypes<I[K]>) => PipelineT & PipelineVersions<I>;
+  [K in keyof I]: (...args: ArgumentTypes<I[K]>) => Pipeline & PipelineVersions<I>;
 };
 
-interface RedisWithExtendedPipeline<I> extends RedisT {
-  multi(commands?: string[][], options?: MultiOptionsT): PipelineT & PipelineVersions<I>;
-  multi(options: { pipeline: false }): Promise<string>;
+interface RedisWithExtendedPipeline<I> extends Redis {
+  multi(commands?: string[][], options?: MultiOptions): Pipeline & PipelineVersions<I>;
+  multi(options: { pipeline: false }): Promise<Ok>;
 }
 
 export type ExtendedRedis<I> = I & RedisWithExtendedPipeline<I>;
 
 export async function multiExec(
-  client: RedisT,
+  client: Redis,
   commands: string[][],
 ): Promise<[unknown, any][] | null> {
   if (!commands.length) {
