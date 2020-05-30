@@ -391,6 +391,38 @@ const collection = enc(['myEncryptedField', 'another'], baseCollection);
 
 See example notes above for an example on using `customEncryption`.
 
+### Migrated
+
+#### migrate
+
+```javascript
+const collection = migrate({
+  migratedField: (stored) => newValue,
+  another: (stored) => newValue
+}, baseCollection);
+```
+
+```javascript
+const collection = migrate(['versionColumn'], {
+  migratedField: (stored, { versionColumn }) => newValue,
+  another: (stored, { versionColumn }) => newValue
+}, baseCollection);
+```
+
+Wraps a collection with an automatic on-fetch migration. The migrations will
+be applied whenever records are read, but will not be saved back into the
+database. The migration functions are per-field, taking in the old field
+value and returning an updated field value. Each function will only be
+invoked if the user requested that particular field.
+
+If version information is required to decide whether to migrate or not,
+additional fields to fetch can be specified and these will be made available
+to all migration functions in the second function parameter. It is up to you
+to write the appropriate version to this field when adding or updating
+values. You can specify as many extra fields as you need (e.g. to allow one
+version field for each field, or to include other fields which are used to
+derive new values).
+
 ## Development
 
 To run the test suite, you will need to have a local installation of MongoDB,

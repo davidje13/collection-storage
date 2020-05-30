@@ -6,6 +6,7 @@ import {
   encryptByRecord,
   encryptByRecordWithMasterKey,
 } from './wrappers/encrypted';
+import migrate from './wrappers/migrated';
 import type { DB } from './interfaces/DB';
 import type { Collection } from './interfaces/Collection';
 import type { IDable } from './interfaces/IDable';
@@ -25,6 +26,7 @@ export {
   encryptByKey,
   encryptByRecord,
   encryptByRecordWithMasterKey,
+  migrate,
 };
 export {
   default as nodeEncryptionSync,

@@ -1,33 +1,33 @@
 import type { IDable } from '../interfaces/IDable';
 import type { Collection, UpdateOptions } from '../interfaces/Collection';
 
-export type Wrapped<T extends IDable, WF extends keyof T, W> = {
-  [K in keyof T]: K extends 'id' ? T[K] : K extends WF ? W : T[K];
+export type Wrapped<T extends IDable, Fields extends keyof T, FieldStorage> = {
+  [K in keyof T]: K extends 'id' ? T[K] : K extends Fields ? FieldStorage : T[K];
 };
 
-export interface Wrapper<T extends IDable, K extends keyof T, W, E> {
+export interface Wrapper<T extends IDable, K extends keyof T, FieldStorage, CustomData> {
   wrap: (
     key: K,
     value: T[K],
-    processed: E,
-  ) => Promise<W> | W;
+    processed: CustomData,
+  ) => Promise<FieldStorage> | FieldStorage;
 
   unwrap: (
     key: K,
-    value: W,
-    processed: E,
+    value: FieldStorage,
+    processed: CustomData,
   ) => Promise<T[K]> | T[K];
 
   preWrap?: (
     record: Readonly<Partial<T>>,
-  ) => Promise<E> | E;
+  ) => Promise<CustomData> | CustomData;
 
   preUnwrap?: (
-    record: Readonly<Partial<Wrapped<T, K, W>>>,
-  ) => Promise<E> | E;
+    record: Readonly<Partial<Wrapped<T, K, FieldStorage>>>,
+  ) => Promise<CustomData> | CustomData;
 
   preRemove?: (
-    record: Readonly<Pick<Wrapped<T, K, W>, 'id'>>,
+    record: Readonly<Pick<Wrapped<T, K, FieldStorage>, 'id'>>,
   ) => Promise<void> | void;
 }
 
@@ -39,14 +39,14 @@ function hasAnyField(value: object, fields: readonly string[]): boolean {
 export default class WrappedCollection<
   T extends IDable,
   WF extends readonly (keyof Omit<T, 'id'> & string)[],
-  W,
+  FieldStorage,
   E,
-  Inner extends Wrapped<T, WF[-1], W> = Wrapped<T, WF[-1], W>
+  Inner extends Wrapped<T, WF[-1], FieldStorage> = Wrapped<T, WF[-1], FieldStorage>
 > implements Collection<T> {
   public constructor(
     private readonly baseCollection: Collection<Inner>,
     private readonly fields: WF,
-    private readonly wrapper: Wrapper<T, WF[-1], W, E>,
+    private readonly wrapper: Wrapper<T, WF[-1], FieldStorage, E>,
   ) {}
 
   public async add(entry: T): Promise<void> {
@@ -62,7 +62,7 @@ export default class WrappedCollection<
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
     if (this.fields.includes(key as any)) {
-      throw new Error('Cannot get by encrypted value');
+      throw new Error('Cannot get by wrapped value');
     }
     const raw = await this.baseCollection.get(key, value, fields!);
     return raw ? this.unwrapAll(raw, { [key]: value }) : null;
@@ -77,7 +77,7 @@ export default class WrappedCollection<
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
     if (key !== undefined && this.fields.includes(key as any)) {
-      throw new Error('Cannot get by encrypted value');
+      throw new Error('Cannot get by wrapped value');
     }
     const raw = await this.baseCollection.getAll(key!, value!, fields!);
     const extra = (key !== undefined) ? { [key]: value } : undefined;
@@ -91,7 +91,7 @@ export default class WrappedCollection<
     options?: UpdateOptions,
   ): Promise<void> {
     if (this.fields.includes(key as any)) {
-      throw new Error('Cannot update by encrypted value');
+      throw new Error('Cannot update by wrapped value');
     }
     const converted = await this.wrapAll(update, { [key]: value });
     return this.baseCollection.update(key, value, converted, options);
@@ -102,7 +102,7 @@ export default class WrappedCollection<
     value: T[K] & Inner[K],
   ): Promise<number> {
     if (this.fields.includes(key as any)) {
-      throw new Error('Cannot remove by encrypted value');
+      throw new Error('Cannot remove by wrapped value');
     }
     if (!this.wrapper.preRemove) {
       return this.baseCollection.remove(key, value);

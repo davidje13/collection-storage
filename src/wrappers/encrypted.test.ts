@@ -80,7 +80,7 @@ describe('encryption', () => {
 
     it('prevents reading by encrypted key', async () => {
       await expect(col.get('encrypted', 9)).rejects
-        .toThrow('Cannot get by encrypted value');
+        .toThrow('Cannot get by wrapped value');
     });
 
     it('allows reading filtered columns', async () => {
@@ -208,7 +208,7 @@ describe('encryption', () => {
 
     it('prevents reading by encrypted key', async () => {
       await expect(col.get('encrypted', 9)).rejects
-        .toThrow('Cannot get by encrypted value');
+        .toThrow('Cannot get by wrapped value');
     });
 
     it('prevents reading filtered columns without id', async () => {
@@ -387,7 +387,7 @@ describe('encryption', () => {
 
     it('prevents reading by encrypted key', async () => {
       await expect(col.get('encrypted', 9)).rejects
-        .toThrow('Cannot get by encrypted value');
+        .toThrow('Cannot get by wrapped value');
     });
 
     it('prevents reading filtered columns without id', async () => {
