@@ -391,6 +391,57 @@ const collection = enc(['myEncryptedField', 'another'], baseCollection);
 
 See example notes above for an example on using `customEncryption`.
 
+### Compressed
+
+#### compress
+
+```javascript
+const collection = compress(['compressedField', 'another'], baseCollection);
+```
+
+Wraps a collection with compression. Uses gzip compression and ensures that
+short uncompressable messages will not grow significantly (2 bytes maximum).
+
+If you apply compression to an existing column, old (uncompressed) values
+will be passed through automatically (except binary data). To disable this
+functionality, pass `allowRaw: false`:
+
+```javascript
+const collection = compress(['value'], baseCollection, { allowRaw: false });
+```
+
+If you are migrating a column which contains binary data, you should
+probably migrate the data to add compression (or at least prefix all values
+with a 0x00 byte to mark them uncompressed). If this is not possible, you
+can pass `allowRawBuffer: true` to `compress` but **note**: any data which
+begins with `0x00` will have that byte stripped. Additionally, any data which
+happens to start with `0x1f 0x8b` (the gzip "magic number") will be passed
+through `zlib.gunzip`. Enabling `allowRawBuffer` is provided as an escape
+hatch, but is _not recommended_.
+
+Do not apply compression to short values, or values with no compressible
+structure (e.g. pre-compressed images, random data); it will increase the
+size rather than reduce it.
+
+##### compress & encrypt
+
+If you want to use compression in combination with encryption, note that you
+should compress *then* encrypt. Once data has been encrypted, compression will
+have little effect. Also beware: if your application allows writing part of a
+compressed field, and the database is exposed, it will be possible for an
+attacker to use compression, along with observation of the resulting record
+size, to guess secrets from the same value which may otherwise be hidden to
+them. Data in separate fields which an attacker cannot control will remain
+safe, even if compressed. This is a rare situation but should be considered
+when encrypting any compressed data.
+
+```javascript
+const fields = ['field', 'another'];
+const enc = encryptByKey(key);
+// be sure to apply compression and encryption in the correct order!
+const collection = compress(fields, enc(fields, baseCollection));
+```
+
 ### Migrated
 
 #### migrate
