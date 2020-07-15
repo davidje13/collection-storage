@@ -1,7 +1,10 @@
-export default interface Encryption<EncT, KeyT, SerialisedKeyT> {
-  encrypt(key: KeyT, v: Buffer): Promise<EncT> | EncT;
+type EncT = Buffer;
+type RawT = Buffer;
 
-  decrypt(key: KeyT, v: EncT): Promise<Buffer> | Buffer;
+export default interface Encryption<KeyT, SerialisedKeyT> {
+  encrypt(key: KeyT, v: RawT): Promise<EncT> | EncT;
+
+  decrypt(key: KeyT, v: EncT): Promise<RawT> | RawT;
 
   generateKey(): Promise<KeyT> | KeyT;
 

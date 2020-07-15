@@ -7,6 +7,8 @@ import WrappedCollection, { Wrapped } from './WrappedCollection';
 
 type CompressableKeys<T> = readonly (keyof Omit<T, 'id'> & string)[];
 
+export type Compressed<T extends IDable, WF extends keyof T> = Wrapped<T, WF, Buffer>;
+
 export interface CompressOptions {
   allowRaw?: boolean;
   allowRawBuffer?: boolean;
@@ -50,7 +52,7 @@ async function decompressValue(v: Buffer, {
 
 export function compress<T extends IDable, F extends CompressableKeys<T>>(
   fields: F,
-  baseCollection: Collection<Wrapped<T, F[-1], Buffer>>,
+  baseCollection: Collection<Compressed<T, F[-1]>>,
   options: CompressOptions = {},
 ): Collection<T> {
   return new WrappedCollection<T, F, Buffer, never>(baseCollection, fields, {

@@ -4,11 +4,10 @@ import {
   encryptByRecord,
   encryptByRecordWithMasterKey,
   KeyRecord,
+  Encrypted,
 } from './encrypted';
-import type { Wrapped } from './WrappedCollection';
 import CollectionStorage from '../CollectionStorage';
 import type { Collection } from '../interfaces/Collection';
-import type { IDable } from '../interfaces/IDable';
 
 interface TestType {
   id: string;
@@ -17,9 +16,7 @@ interface TestType {
   encrypted: number;
 }
 
-type EncT = Buffer;
 type SerialisedKeyT = Buffer;
-type Encrypted<T extends IDable, WF extends keyof T> = Wrapped<T, WF, EncT>;
 
 describe('encryption', () => {
   const rootKey = crypto.randomBytes(32);
@@ -280,7 +277,7 @@ describe('encryption', () => {
 
   describe('encryptByRecordWithMasterKey', () => {
     let col: Collection<TestType>;
-    let keyCol: Collection<KeyRecord<string, EncT>>;
+    let keyCol: Collection<KeyRecord<string, SerialisedKeyT>>;
     let backingCol: Collection<Encrypted<TestType, 'encrypted'>>;
 
     beforeEach(async () => {

@@ -11,23 +11,25 @@ export interface KeyRecord<ID extends IDType, KeyT> {
   key: KeyT;
 }
 
+export type Encrypted<T extends IDable, WF extends keyof T> = Wrapped<T, WF, Buffer>;
+
 type EncryptableKeys<T> = readonly (keyof Omit<T, 'id'> & string)[];
 
-type Encrypter<EncT, ID extends IDType> = <T extends IDableBy<ID>>(
+type Encrypter<ID extends IDType> = <T extends IDableBy<ID>>(
 ) => <F extends EncryptableKeys<T>>(
   fields: F,
-  baseCollection: Collection<Wrapped<T, F[-1], EncT>>,
+  baseCollection: Collection<Encrypted<T, F[-1]>>,
 ) => Collection<T>;
 
 // makeEncrypter provides optional 2-tier function call due to
 // https://github.com/Microsoft/TypeScript/issues/26242
 
-function makeEncrypter<EncT, ID extends IDType>(
+function makeEncrypter<ID extends IDType>(
   wrapper: <T extends IDableBy<ID>, F extends EncryptableKeys<T>>(
     fields: F,
-    baseCollection: Collection<Wrapped<T, F[-1], EncT>>,
+    baseCollection: Collection<Encrypted<T, F[-1]>>,
   ) => Collection<T>,
-): Encrypter<EncT, ID> {
+): Encrypter<ID> {
   return (fields?: any, baseCollection?: Collection<any>): any => {
     if (fields && baseCollection) {
       // non-typescript API (remove need for extra ())
@@ -37,24 +39,24 @@ function makeEncrypter<EncT, ID extends IDType>(
   };
 }
 
-function encryptByKey(sKey: Buffer): Encrypter<Buffer, IDType>;
+function encryptByKey(sKey: Buffer): Encrypter<IDType>;
 
-function encryptByKey<EncT, KeyT, SerialisedKeyT>(
+function encryptByKey<KeyT, SerialisedKeyT>(
   sKey: SerialisedKeyT,
-  cr: Encryption<EncT, KeyT, SerialisedKeyT>,
-): Encrypter<EncT, IDType>;
+  cr: Encryption<KeyT, SerialisedKeyT>,
+): Encrypter<IDType>;
 
-function encryptByKey<EncT, KeyT, SerialisedKeyT>(
+function encryptByKey<KeyT, SerialisedKeyT>(
   sKey: SerialisedKeyT,
-  cr: Encryption<EncT, KeyT, SerialisedKeyT> = nodeEncryptionSync as any,
-): Encrypter<EncT, IDType> {
+  cr: Encryption<KeyT, SerialisedKeyT> = nodeEncryptionSync as any,
+): Encrypter<IDType> {
   const key = cr.deserialiseKey(sKey);
 
   return makeEncrypter(<T extends IDable, F extends EncryptableKeys<T>>(
     fields: F,
-    baseCollection: Collection<Wrapped<T, F[-1], EncT>>,
-  ) => new WrappedCollection<T, F, EncT, never>(baseCollection, fields, {
-    wrap: (k, v): Promise<EncT> | EncT => cr.encrypt(key, serialiseValueBin(v)),
+    baseCollection: Collection<Encrypted<T, F[-1]>>,
+  ) => new WrappedCollection<T, F, Buffer, never>(baseCollection, fields, {
+    wrap: (k, v): Promise<Buffer> | Buffer => cr.encrypt(key, serialiseValueBin(v)),
     unwrap: async (k, v): Promise<any> => deserialiseValueBin(await cr.decrypt(key, v)),
   }));
 }
@@ -62,19 +64,19 @@ function encryptByKey<EncT, KeyT, SerialisedKeyT>(
 function encryptByRecord<ID extends IDType>(
   keyCollection: Collection<KeyRecord<ID, Buffer>>,
   cacheSize?: number,
-): Encrypter<Buffer, ID>;
+): Encrypter<ID>;
 
-function encryptByRecord<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
+function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
   keyCollection: Collection<KeyRecord<ID, SerialisedKeyT>>,
   cacheSize: number,
-  cr: Encryption<EncT, KeyT, SerialisedKeyT>,
-): Encrypter<EncT, ID>;
+  cr: Encryption<KeyT, SerialisedKeyT>,
+): Encrypter<ID>;
 
-function encryptByRecord<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
+function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
   keyCollection: Collection<KeyRecord<ID, SerialisedKeyT>>,
   cacheSize = 0,
-  cr: Encryption<EncT, KeyT, SerialisedKeyT> = nodeEncryptionSync as any,
-): Encrypter<EncT, ID> {
+  cr: Encryption<KeyT, SerialisedKeyT> = nodeEncryptionSync as any,
+): Encrypter<ID> {
   const cache = new LruCache<ID, KeyT>(cacheSize);
 
   const loadKey = async (
@@ -112,11 +114,11 @@ function encryptByRecord<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
   };
 
   // https://github.com/microsoft/TypeScript/issues/39080
-  return makeEncrypter<EncT, ID>(<T extends IDableBy<ID>, F extends EncryptableKeys<T>>(
+  return makeEncrypter<ID>(<T extends IDableBy<ID>, F extends EncryptableKeys<T>>(
     fields: F,
-    baseCollection: Collection<Wrapped<T, F[-1], EncT>>,
-  ) => new WrappedCollection<T, F, EncT, KeyT>(baseCollection, fields, {
-    wrap: (k, v, key): Promise<EncT> | EncT => cr.encrypt(key, serialiseValueBin(v)),
+    baseCollection: Collection<Encrypted<T, F[-1]>>,
+  ) => new WrappedCollection<T, F, Buffer, KeyT>(baseCollection, fields, {
+    wrap: (k, v, key): Promise<Buffer> | Buffer => cr.encrypt(key, serialiseValueBin(v)),
     unwrap: async (k, v, key): Promise<any> => deserialiseValueBin(await cr.decrypt(key, v)),
     preWrap: loadKey.bind(null, true),
     preUnwrap: loadKey.bind(null, false),
@@ -128,21 +130,21 @@ function encryptByRecordWithMasterKey<ID extends IDType>(
   sMasterKey: Buffer,
   keyCollection: Collection<KeyRecord<ID, Buffer>>,
   cacheSize?: number,
-): Encrypter<Buffer, ID>;
+): Encrypter<ID>;
 
-function encryptByRecordWithMasterKey<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
+function encryptByRecordWithMasterKey<ID extends IDType, KeyT, SerialisedKeyT>(
   sMasterKey: SerialisedKeyT,
-  keyCollection: Collection<KeyRecord<ID, EncT>>,
+  keyCollection: Collection<KeyRecord<ID, Buffer>>,
   cacheSize: number,
-  cr: Encryption<EncT, KeyT, SerialisedKeyT>,
-): Encrypter<EncT, ID>;
+  cr: Encryption<KeyT, SerialisedKeyT>,
+): Encrypter<ID>;
 
-function encryptByRecordWithMasterKey<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
+function encryptByRecordWithMasterKey<ID extends IDType, KeyT, SerialisedKeyT>(
   sMasterKey: SerialisedKeyT,
-  keyCollection: Collection<KeyRecord<ID, EncT>>,
+  keyCollection: Collection<KeyRecord<ID, Buffer>>,
   cacheSize = 0,
-  cr: Encryption<EncT, KeyT, SerialisedKeyT> = nodeEncryptionSync as any,
-): Encrypter<EncT, ID> {
+  cr: Encryption<KeyT, SerialisedKeyT> = nodeEncryptionSync as any,
+): Encrypter<ID> {
   const keyEnc = encryptByKey(sMasterKey, cr);
   const encKeyCollection = keyEnc<KeyRecord<ID, SerialisedKeyT>>()(
     ['key'],

@@ -5,7 +5,7 @@ const ALG = 'aes-256-cbc';
 const ALG_BUF = Buffer.from(`${ALG}:`, 'utf8');
 const IV_LEN = 16;
 
-const nodeEncryptionSync: Encryption<Buffer, KeyObject, Buffer> = {
+const nodeEncryptionSync: Encryption<KeyObject, Buffer> = {
   encrypt: (key: KeyObject, v: Buffer): Buffer => {
     const iv = crypto.randomBytes(IV_LEN);
     const cipher = crypto.createCipheriv(ALG, key, iv);

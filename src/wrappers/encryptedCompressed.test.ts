@@ -1,18 +1,12 @@
 import crypto from 'crypto';
-import { encryptByKey } from './encrypted';
-import { compress } from './compressed';
-import type { Wrapped } from './WrappedCollection';
+import { encryptByKey, Encrypted } from './encrypted';
+import { compress, Compressed } from './compressed';
 import CollectionStorage from '../CollectionStorage';
-import type { IDable } from '../interfaces/IDable';
 
 interface TestType {
   id: string;
   data: string;
 }
-
-type EncT = Buffer;
-type Encrypted<T extends IDable, WF extends keyof T> = Wrapped<T, WF, EncT>;
-type Compressed<T extends IDable, WF extends keyof T> = Wrapped<T, WF, Buffer>;
 
 describe('compression + encryption', () => {
   const enc = encryptByKey(crypto.randomBytes(32));
