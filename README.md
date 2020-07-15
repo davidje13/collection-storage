@@ -217,6 +217,16 @@ const myEncryption = {
 const enc = encryptByKey(rootKey, myEncryption);
 ```
 
+## Compression
+
+See the documentation for [compress](#compressed) below for details on
+enabling automatic compression of values.
+
+## Per-record Migration
+
+See the documentation for [migrate](#migration) below for details on
+enabling automatic migrations on a per-record basis.
+
 ## API
 
 ### CollectionStorage
@@ -393,7 +403,7 @@ See example notes above for an example on using `customEncryption`.
 
 ### Compressed
 
-#### compress
+#### `compress`
 
 ```javascript
 const collection = compress(['compressedField', 'another'], baseCollection);
@@ -423,7 +433,7 @@ Do not apply compression to short values, or values with no compressible
 structure (e.g. pre-compressed images, random data); it will increase the
 size rather than reduce it.
 
-##### compress & encrypt
+##### `compress` & `encrypt`
 
 If you want to use compression in combination with encryption, note that you
 should compress *then* encrypt. Once data has been encrypted, compression will
@@ -444,7 +454,7 @@ const collection = compress(fields, enc(fields, baseCollection));
 
 ### Migrated
 
-#### migrate
+#### `migrate`
 
 ```javascript
 const collection = migrate({
