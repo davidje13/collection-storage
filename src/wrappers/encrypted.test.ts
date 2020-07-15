@@ -247,6 +247,37 @@ describe('encryption', () => {
     });
   });
 
+  describe('encryptByRecord value types', () => {
+    interface CheckT {
+      id: string;
+      value: unknown;
+    }
+
+    let col: Collection<CheckT>;
+
+    beforeEach(async () => {
+      const db = await CollectionStorage.connect('memory://');
+      const keyCol = db.getCollection<KeyRecord<string, SerialisedKeyT>>('keys');
+      col = encryptByRecord(keyCol)<CheckT>()(['value'], db.getCollection('enc'));
+    });
+
+    it('supports JSON values', async () => {
+      const record = { id: 'a', value: { foo: ['a', { bar: 7 }] } };
+
+      await col.add(record);
+      const value = await col.get('id', 'a');
+      expect(value).toEqual(record);
+    });
+
+    it('supports Buffer values', async () => {
+      const record = { id: 'a', value: Buffer.from('hello', 'utf8') };
+
+      await col.add(record);
+      const value = await col.get('id', 'a');
+      expect([...value!.value as Buffer]).toEqual([...record.value]);
+    });
+  });
+
   describe('encryptByRecordWithMasterKey', () => {
     let col: Collection<TestType>;
     let keyCol: Collection<KeyRecord<string, EncT>>;

@@ -1,7 +1,7 @@
 import type { IDable, IDableBy, IDType } from '../interfaces/IDable';
 import type { Collection } from '../interfaces/Collection';
 import LruCache from '../helpers/LruCache';
-import { serialiseValue, deserialiseValue } from '../helpers/serialiser';
+import { serialiseValueBin, deserialiseValueBin } from '../helpers/serialiser';
 import WrappedCollection, { Wrapped } from './WrappedCollection';
 import type Encryption from './encryption/Encryption';
 import nodeEncryptionSync from './encryption/nodeEncryptionSync';
@@ -54,8 +54,8 @@ function encryptByKey<EncT, KeyT, SerialisedKeyT>(
     fields: F,
     baseCollection: Collection<Wrapped<T, F[-1], EncT>>,
   ) => new WrappedCollection<T, F, EncT, never>(baseCollection, fields, {
-    wrap: (k, v): Promise<EncT> | EncT => cr.encrypt(key, serialiseValue(v)),
-    unwrap: async (k, v): Promise<any> => deserialiseValue(await cr.decrypt(key, v)),
+    wrap: (k, v): Promise<EncT> | EncT => cr.encrypt(key, serialiseValueBin(v)),
+    unwrap: async (k, v): Promise<any> => deserialiseValueBin(await cr.decrypt(key, v)),
   }));
 }
 
@@ -116,8 +116,8 @@ function encryptByRecord<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
     fields: F,
     baseCollection: Collection<Wrapped<T, F[-1], EncT>>,
   ) => new WrappedCollection<T, F, EncT, KeyT>(baseCollection, fields, {
-    wrap: (k, v, key): Promise<EncT> | EncT => cr.encrypt(key, JSON.stringify(v)),
-    unwrap: async (k, v, key): Promise<any> => JSON.parse(await cr.decrypt(key, v)),
+    wrap: (k, v, key): Promise<EncT> | EncT => cr.encrypt(key, serialiseValueBin(v)),
+    unwrap: async (k, v, key): Promise<any> => deserialiseValueBin(await cr.decrypt(key, v)),
     preWrap: loadKey.bind(null, true),
     preUnwrap: loadKey.bind(null, false),
     preRemove: removeKey,

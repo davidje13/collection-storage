@@ -193,11 +193,11 @@ operations), you can provide a final parameter to the `encryptBy*` function:
 ```javascript
 const myEncryption = {
   encrypt: async (key, input) => {
-    // input (string) => encrypted (Buffer)
+    // input (Buffer) => encrypted (Buffer)
   },
 
   decrypt: async (key, encrypted) => {
-    // encrypted (Buffer) => value (string)
+    // encrypted (Buffer) => value (Buffer)
   },
 
   generateKey: () => {
