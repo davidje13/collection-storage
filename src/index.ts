@@ -5,6 +5,7 @@ import {
   encryptByKey,
   encryptByRecord,
   encryptByRecordWithMasterKey,
+  EncryptionOptions,
   Encrypted,
 } from './wrappers/encrypted';
 import { compress, Compressed, CompressOptions } from './wrappers/compressed';
@@ -18,6 +19,7 @@ export type {
   Wrapped,
   Encryption,
   Encrypted,
+  EncryptionOptions,
   Compressed,
   CompressOptions,
 };

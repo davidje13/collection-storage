@@ -161,17 +161,17 @@ async function example() {
 
   // Option 2: unique key per value, non-encrypted key
   const keyCol2 = db.getCollection('keys2');
-  const enc2 = encryptByRecord(keyCol2, 50); // cache 50 keys
+  const enc2 = encryptByRecord(keyCol2, { cacheSize: 50 }); // cache 50 keys
   const simpleCol2 = enc2(['foo'], db.getCollection('simple2'));
 
   // Option 3 (recommended): unique key per value, encrypted using global key
   const keyCol3 = db.getCollection('keys3');
-  const enc3 = encryptByRecordWithMasterKey(rootKey, keyCol3, 50); // cache 50 keys
+  const enc3 = encryptByRecordWithMasterKey(rootKey, keyCol3, { cacheSize: 50 }); // cache 50 keys
   const simpleCol3 = enc3(['foo'], db.getCollection('simple3'));
 
   // option 3 is equivalent to:
   const keyCol4 = encryptByKey(rootKey)(['key'], db.getCollection('keys4'));
-  const enc4 = encryptByRecord(keyCol4, 50);
+  const enc4 = encryptByRecord(keyCol4, { cacheSize: 50 });
   const simpleCol4 = enc4(['foo'], db.getCollection('simple4'));
 
   // For all options, the encryption is transparent:
@@ -214,7 +214,7 @@ const myEncryption = {
   },
 };
 
-const enc = encryptByKey(rootKey, myEncryption);
+const enc = encryptByKey(rootKey, { encryption: myEncryption });
 ```
 
 ## Compression
@@ -350,7 +350,7 @@ Returns the number of records removed (0 if no records matched).
 #### `encryptByKey`
 
 ```javascript
-const enc = encryptByKey(key, [customEncryption]);
+const enc = encryptByKey(key, [options]);
 const collection = enc(['encryptedField', 'another'], baseCollection);
 ```
 
@@ -359,47 +359,56 @@ Returns a function which can wrap collections with encryption.
 By default the provided `key` should be a 32-byte buffer.
 If custom encryption is used, the key should conform to its expectations.
 
-See example notes above for an example on using `customEncryption`.
+See example notes above for an example on using `options.encryption`.
+
+If `options.allowRaw` is `true`, unencrypted values will be passed through.
+This can be useful when migrating old columns to use encryption. Note that
+buffer (binary) data will _always_ be decrypted; never passed through.
 
 #### `encryptByRecord`
 
 ```javascript
-const enc = encryptByRecord(keyCollection, [cacheSize], [customEncryption]);
+const enc = encryptByRecord(keyCollection, [options]);
 const collection = enc(['myEncryptedField', 'another'], baseCollection);
 ```
 
 Returns a function which can wrap collections with encryption.
 
-Stores one key per ID in `keyCollection` (unencrypted). If `cacheSize` is
-provided, uses a least-recently-used cache for keys to reduce database access.
+Stores one key per ID in `keyCollection` (unencrypted). If `options.cacheSize`
+is provided, uses a least-recently-used cache for keys to reduce database
+access.
 
 Updating a record re-encrypts using the same key. Removing records also
 removes the corresponding keys.
 
-See example notes above for an example on using `customEncryption`.
+See example notes above for an example on using `options.encryption`.
+
+If `options.allowRaw` is `true`, unencrypted values will be passed through.
+This can be useful when migrating old columns to use encryption. Note that
+buffer (binary) data will _always_ be decrypted; never passed through.
 
 #### `encryptByRecordWithMasterKey`
 
 ```javascript
-const enc = encryptByRecordWithMasterKey(masterKey, keyCollection, [cacheSize], [customEncryption]);
+const enc = encryptByRecordWithMasterKey(masterKey, keyCollection, [options]);
 const collection = enc(['myEncryptedField', 'another'], baseCollection);
 ```
 
 Returns a function which can wrap collections with encryption.
 
 Stores one key per ID in `keyCollection` (encrypted using `masterKey`).
-If `cacheSize` is provided, uses a least-recently-used cache for keys to
-reduce database access.
+If `options.cacheSize` is provided, uses a least-recently-used cache for keys
+to reduce database access.
 
 This is equivalent to:
 
 ```javascript
-const keys = encryptByKey(masterKey, [customEncryption])(keyCollection, ['key']);
-const enc = encryptByRecord(keys, [cacheSize], [customEncryption]);
+const keys = encryptByKey(masterKey, [options])(keyCollection, ['key']);
+const enc = encryptByRecord(keys, [options]);
 const collection = enc(['myEncryptedField', 'another'], baseCollection);
 ```
 
-See example notes above for an example on using `customEncryption`.
+See example notes above for an example on using `options.encryption`.
 
 ### Compressed
 

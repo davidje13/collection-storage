@@ -39,43 +39,73 @@ function makeEncrypter<ID extends IDType>(
   };
 }
 
-function encryptByKey(sKey: Buffer): Encrypter<IDType>;
+export interface EncryptionOptions<KeyT = Buffer, SerialisedKeyT = Buffer> {
+  allowRaw?: boolean;
+  encryption?: Encryption<KeyT, SerialisedKeyT>;
+}
 
-function encryptByKey<KeyT, SerialisedKeyT>(
-  sKey: SerialisedKeyT,
-  cr: Encryption<KeyT, SerialisedKeyT>,
+export interface RecordEncryptionOptions {
+  cacheSize?: number;
+}
+
+interface CustomEncryptionOptions<KeyT, SerialisedKeyT>
+  extends EncryptionOptions<KeyT, SerialisedKeyT> {
+  encryption: Encryption<KeyT, SerialisedKeyT>;
+}
+
+function encryptByKey(
+  sKey: Buffer,
+  options?: EncryptionOptions,
 ): Encrypter<IDType>;
 
 function encryptByKey<KeyT, SerialisedKeyT>(
   sKey: SerialisedKeyT,
-  cr: Encryption<KeyT, SerialisedKeyT> = nodeEncryptionSync as any,
+  options: CustomEncryptionOptions<KeyT, SerialisedKeyT>,
+): Encrypter<IDType>;
+
+function encryptByKey<KeyT, SerialisedKeyT>(
+  sKey: SerialisedKeyT,
+  {
+    encryption = nodeEncryptionSync as any,
+    allowRaw = false,
+  }: EncryptionOptions<KeyT, SerialisedKeyT> = {},
 ): Encrypter<IDType> {
-  const key = cr.deserialiseKey(sKey);
+  const key = encryption.deserialiseKey(sKey);
 
   return makeEncrypter(<T extends IDable, F extends EncryptableKeys<T>>(
     fields: F,
     baseCollection: Collection<Encrypted<T, F[-1]>>,
   ) => new WrappedCollection<T, F, Buffer, never>(baseCollection, fields, {
-    wrap: (k, v): Promise<Buffer> | Buffer => cr.encrypt(key, serialiseValueBin(v)),
-    unwrap: async (k, v): Promise<any> => deserialiseValueBin(await cr.decrypt(key, v)),
+    wrap: (k, v): Promise<Buffer> | Buffer => encryption.encrypt(key, serialiseValueBin(v)),
+    unwrap: async (k, v): Promise<any> => {
+      if (!(v instanceof Buffer)) {
+        if (allowRaw) {
+          return v; // probably an old record before encryption was added
+        }
+        throw new Error('unencrypted data');
+      }
+      return deserialiseValueBin(await encryption.decrypt(key, v));
+    },
   }));
 }
 
 function encryptByRecord<ID extends IDType>(
   keyCollection: Collection<KeyRecord<ID, Buffer>>,
-  cacheSize?: number,
+  options?: EncryptionOptions & RecordEncryptionOptions,
 ): Encrypter<ID>;
 
 function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
   keyCollection: Collection<KeyRecord<ID, SerialisedKeyT>>,
-  cacheSize: number,
-  cr: Encryption<KeyT, SerialisedKeyT>,
+  options: CustomEncryptionOptions<KeyT, SerialisedKeyT> & RecordEncryptionOptions,
 ): Encrypter<ID>;
 
 function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
   keyCollection: Collection<KeyRecord<ID, SerialisedKeyT>>,
-  cacheSize = 0,
-  cr: Encryption<KeyT, SerialisedKeyT> = nodeEncryptionSync as any,
+  {
+    encryption = nodeEncryptionSync as any,
+    allowRaw = false,
+    cacheSize = 0,
+  }: EncryptionOptions<KeyT, SerialisedKeyT> & RecordEncryptionOptions = {},
 ): Encrypter<ID> {
   const cache = new LruCache<ID, KeyT>(cacheSize);
 
@@ -96,13 +126,13 @@ function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
     let key: KeyT;
     const item = await keyCollection.get('id', id, ['key']);
     if (item) {
-      key = cr.deserialiseKey(item.key);
+      key = encryption.deserialiseKey(item.key);
     } else {
       if (!generateIfNeeded) {
         throw new Error('No encryption key found for record');
       }
-      key = await cr.generateKey();
-      await keyCollection.add({ id, key: cr.serialiseKey(key) });
+      key = await encryption.generateKey();
+      await keyCollection.add({ id, key: encryption.serialiseKey(key) });
     }
     cache.set(id, key);
     return key;
@@ -118,8 +148,16 @@ function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
     fields: F,
     baseCollection: Collection<Encrypted<T, F[-1]>>,
   ) => new WrappedCollection<T, F, Buffer, KeyT>(baseCollection, fields, {
-    wrap: (k, v, key): Promise<Buffer> | Buffer => cr.encrypt(key, serialiseValueBin(v)),
-    unwrap: async (k, v, key): Promise<any> => deserialiseValueBin(await cr.decrypt(key, v)),
+    wrap: (k, v, key): Promise<Buffer> | Buffer => encryption.encrypt(key, serialiseValueBin(v)),
+    unwrap: async (k, v, key): Promise<any> => {
+      if (!(v instanceof Buffer)) {
+        if (allowRaw) {
+          return v; // probably an old record before encryption was added
+        }
+        throw new Error('unencrypted data');
+      }
+      return deserialiseValueBin(await encryption.decrypt(key, v));
+    },
     preWrap: loadKey.bind(null, true),
     preUnwrap: loadKey.bind(null, false),
     preRemove: removeKey,
@@ -129,28 +167,27 @@ function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
 function encryptByRecordWithMasterKey<ID extends IDType>(
   sMasterKey: Buffer,
   keyCollection: Collection<KeyRecord<ID, Buffer>>,
-  cacheSize?: number,
+  options?: EncryptionOptions & RecordEncryptionOptions,
 ): Encrypter<ID>;
 
 function encryptByRecordWithMasterKey<ID extends IDType, KeyT, SerialisedKeyT>(
   sMasterKey: SerialisedKeyT,
   keyCollection: Collection<KeyRecord<ID, Buffer>>,
-  cacheSize: number,
-  cr: Encryption<KeyT, SerialisedKeyT>,
+  options: CustomEncryptionOptions<KeyT, SerialisedKeyT> & RecordEncryptionOptions,
 ): Encrypter<ID>;
 
 function encryptByRecordWithMasterKey<ID extends IDType, KeyT, SerialisedKeyT>(
   sMasterKey: SerialisedKeyT,
   keyCollection: Collection<KeyRecord<ID, Buffer>>,
-  cacheSize = 0,
-  cr: Encryption<KeyT, SerialisedKeyT> = nodeEncryptionSync as any,
+  options: EncryptionOptions<KeyT, SerialisedKeyT> & RecordEncryptionOptions = {},
 ): Encrypter<ID> {
-  const keyEnc = encryptByKey(sMasterKey, cr);
+  const opts = options as CustomEncryptionOptions<KeyT, SerialisedKeyT> & RecordEncryptionOptions;
+  const keyEnc = encryptByKey(sMasterKey, opts);
   const encKeyCollection = keyEnc<KeyRecord<ID, SerialisedKeyT>>()(
     ['key'],
     keyCollection,
   );
-  return encryptByRecord(encKeyCollection, cacheSize, cr);
+  return encryptByRecord(encKeyCollection, opts);
 }
 
 export {
