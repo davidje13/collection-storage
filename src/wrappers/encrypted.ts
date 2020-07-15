@@ -111,7 +111,8 @@ function encryptByRecord<ID extends IDType, EncT, KeyT, SerialisedKeyT>(
     cache.remove(id);
   };
 
-  return makeEncrypter(<T extends IDableBy<ID>, F extends EncryptableKeys<T>>(
+  // https://github.com/microsoft/TypeScript/issues/39080
+  return makeEncrypter<EncT, ID>(<T extends IDableBy<ID>, F extends EncryptableKeys<T>>(
     fields: F,
     baseCollection: Collection<Wrapped<T, F[-1], EncT>>,
   ) => new WrappedCollection<T, F, EncT, KeyT>(baseCollection, fields, {
