@@ -224,7 +224,7 @@ enabling automatic compression of values.
 
 ## Per-record Migration
 
-See the documentation for [migrate](#migration) below for details on
+See the documentation for [migrate](#migrated) below for details on
 enabling automatic migrations on a per-record basis.
 
 ## API
