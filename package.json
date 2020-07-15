@@ -1,6 +1,6 @@
 {
   "name": "collection-storage",
-  "version": "1.8.3",
+  "version": "2.0.0",
   "description": "abstraction layer around communication with a collection-based database",
   "files": [
     "build/**/*"
