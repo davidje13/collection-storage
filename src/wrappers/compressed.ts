@@ -12,6 +12,7 @@ export type Compressed<T extends IDable, WF extends keyof T> = Wrapped<T, WF, Bu
 export interface CompressOptions {
   allowRaw?: boolean;
   allowRawBuffer?: boolean;
+  compressionThresholdBytes?: number;
 }
 
 const gzipCompress = promisify<Buffer, Buffer>(zlib.gzip);
@@ -19,11 +20,15 @@ const gzipDecompress = promisify<Buffer, Buffer>(zlib.gunzip);
 
 const MARK_UNCOMPRESSED = Buffer.of(0);
 
-async function compressValue(v: unknown): Promise<Buffer> {
+async function compressValue(v: unknown, {
+  compressionThresholdBytes = 200,
+}: CompressOptions): Promise<Buffer> {
   const serialised = serialiseValueBin(v);
-  const gzipped = await gzipCompress(serialised);
-  if (gzipped.length < serialised.length + 1) {
-    return gzipped;
+  if (serialised.length >= compressionThresholdBytes) {
+    const gzipped = await gzipCompress(serialised);
+    if (gzipped.length < serialised.length + 1) {
+      return gzipped;
+    }
   }
   return Buffer.concat([MARK_UNCOMPRESSED, serialised]);
 }
@@ -56,7 +61,7 @@ export function compress<T extends IDable, F extends CompressableKeys<T>>(
   options: CompressOptions = {},
 ): Collection<T> {
   return new WrappedCollection<T, F, Buffer, never>(baseCollection, fields, {
-    wrap: (k, v): Promise<Buffer> => compressValue(v),
+    wrap: (k, v): Promise<Buffer> => compressValue(v, options),
     unwrap: (k, v): Promise<any> => decompressValue(v, options),
   });
 }

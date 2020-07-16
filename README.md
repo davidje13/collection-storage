@@ -440,7 +440,11 @@ hatch, but is _not recommended_.
 
 Do not apply compression to short values, or values with no compressible
 structure (e.g. pre-compressed images, random data); it will increase the
-size rather than reduce it.
+size rather than reduce it. By default, compression is not attempted for
+values which are less than 200 bytes. You can change this with
+`options.compressionThresholdBytes`; smaller values may result in minor byte
+savings, but will require more CPU (note that there is no point setting the
+threshold less than 12 as gzip always adds 11 bytes of overhead).
 
 ##### `compress` & `encrypt`
 

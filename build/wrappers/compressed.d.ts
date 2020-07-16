@@ -7,6 +7,7 @@ export declare type Compressed<T extends IDable, WF extends keyof T> = Wrapped<T
 export interface CompressOptions {
     allowRaw?: boolean;
     allowRawBuffer?: boolean;
+    compressionThresholdBytes?: number;
 }
 export declare function compress<T extends IDable, F extends CompressableKeys<T>>(fields: F, baseCollection: Collection<Compressed<T, F[-1]>>, options?: CompressOptions): Collection<T>;
 export {};
