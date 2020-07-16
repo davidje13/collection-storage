@@ -19,6 +19,17 @@ export default class LruCache<K, V> {
     return value;
   }
 
+  public async cachedAsync(key: K, calc: (key: K) => Promise<V>): Promise<V> {
+    const value = this.storage.get(key);
+    if (this.storage.delete(key)) {
+      this.storage.set(key, value!);
+      return value!;
+    }
+    const created = await calc(key);
+    this.storage.set(key, created);
+    return created;
+  }
+
   public remove(key: K): void {
     this.storage.delete(key);
   }

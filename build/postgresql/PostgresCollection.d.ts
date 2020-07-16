@@ -7,11 +7,11 @@ interface State {
 }
 export default class PostgresCollection<T extends IDable> extends BaseCollection<T> {
     private readonly pool;
-    private readonly stateRef;
     private readonly tableName;
+    private readonly stateRef;
     private readonly cachedQueries;
     private pending?;
-    constructor(pool: PgPoolT, name: string, keys?: DBKeys<T>, stateRef?: State);
+    constructor(pool: PgPoolT, tableName: string, keys?: DBKeys<T>, stateRef?: State);
     protected preAct(): void;
     protected internalAdd({ id, ...rest }: T): Promise<void>;
     protected internalUpsert(id: T['id'], update: Partial<T>): Promise<void>;

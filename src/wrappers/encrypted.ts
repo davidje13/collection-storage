@@ -119,23 +119,18 @@ function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
       throw new Error('Must provide ID for encryption');
     }
 
-    const cached = cache.get(id);
-    if (cached) {
-      return cached;
-    }
-    let key: KeyT;
-    const item = await keyCollection.get('id', id, ['key']);
-    if (item) {
-      key = encryption.deserialiseKey(item.key);
-    } else {
+    return cache.cachedAsync(id, async () => {
+      const item = await keyCollection.get('id', id, ['key']);
+      if (item) {
+        return encryption.deserialiseKey(item.key);
+      }
       if (!generateIfNeeded) {
         throw new Error('No encryption key found for record');
       }
-      key = await encryption.generateKey();
+      const key = await encryption.generateKey();
       await keyCollection.add({ id, key: encryption.serialiseKey(key) });
-    }
-    cache.set(id, key);
-    return key;
+      return key;
+    });
   };
 
   const removeKey = async ({ id }: { id: ID }): Promise<void> => {

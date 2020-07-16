@@ -108,22 +108,19 @@ function fromHStore<T>(
 }
 
 export default class PostgresCollection<T extends IDable> extends BaseCollection<T> {
-  private readonly tableName: string;
-
   private readonly cachedQueries: Partial<Record<keyof typeof STATEMENTS, string>> = {};
 
   private pending?: (() => void)[] = [];
 
   public constructor(
     private readonly pool: PgPoolT,
-    name: string,
+    private readonly tableName: string,
     keys: DBKeys<T> = {},
     private readonly stateRef: State = { closed: false },
   ) {
     super(keys);
 
-    this.tableName = name;
-    configureTable(pool, this.tableName, keys)
+    configureTable(pool, tableName, keys)
       .then(() => {
         if (this.pending) {
           this.pending.forEach((f) => f());
@@ -131,7 +128,7 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
         }
       })
       .catch((e) => {
-        process.stderr.write(`Failed to prepare table ${name}: ${e}`);
+        process.stderr.write(`Failed to prepare table ${tableName}: ${e}`);
       });
   }
 
