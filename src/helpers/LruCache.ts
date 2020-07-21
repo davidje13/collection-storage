@@ -5,20 +5,6 @@ export default class LruCache<K, V> {
     private readonly capacity: number,
   ) {}
 
-  public set(key: K, value: V): void {
-    this.storage.delete(key);
-    this.storage.set(key, value);
-    this.flush();
-  }
-
-  public get(key: K): V | undefined {
-    const value = this.storage.get(key);
-    if (this.storage.delete(key)) {
-      this.storage.set(key, value!);
-    }
-    return value;
-  }
-
   public async cachedAsync(key: K, calc: (key: K) => Promise<V>): Promise<V> {
     const value = this.storage.get(key);
     if (this.storage.delete(key)) {
@@ -27,6 +13,7 @@ export default class LruCache<K, V> {
     }
     const created = await calc(key);
     this.storage.set(key, created);
+    this.flush();
     return created;
   }
 
