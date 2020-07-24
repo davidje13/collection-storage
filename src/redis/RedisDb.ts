@@ -1,12 +1,15 @@
 import RedisCollection from './RedisCollection';
-import type { DB, DBKeys } from '../interfaces/DB';
+import type { DBKeys } from '../interfaces/DB';
+import BaseDB from '../interfaces/BaseDB';
 import type { IDable } from '../interfaces/IDable';
 import RedisConnectionPool from './RedisConnectionPool';
 
-export default class RedisDb implements DB {
+export default class RedisDb extends BaseDB {
   private constructor(
     private readonly pool: RedisConnectionPool,
-  ) {}
+  ) {
+    super((name, keys) => new RedisCollection(this.pool, name, keys));
+  }
 
   public static async connect(url: string): Promise<RedisDb> {
     const { default: RedisStatic } = await import('ioredis');
@@ -19,11 +22,8 @@ export default class RedisDb implements DB {
     ));
   }
 
-  public getCollection<T extends IDable>(
-    name: string,
-    keys?: DBKeys<T>,
-  ): RedisCollection<T> {
-    return new RedisCollection(this.pool, name, keys);
+  public getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): RedisCollection<T> {
+    return super.getCollection(name, keys) as RedisCollection<T>;
   }
 
   public close(): Promise<void> {

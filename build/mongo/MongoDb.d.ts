@@ -1,10 +1,10 @@
 import type { Db as MongoDbT } from 'mongodb';
-import type { DB, DBKeys } from '../interfaces/DB';
+import type { DBKeys } from '../interfaces/DB';
+import BaseDB from '../interfaces/BaseDB';
 import type { IDable } from '../interfaces/IDable';
 import type MongoCollectionT from './MongoCollection';
-export default class MongoDb implements DB {
+export default class MongoDb extends BaseDB {
     private readonly client;
-    private readonly MongoCollection;
     private readonly stateRef;
     private constructor();
     static connect(url: string): Promise<MongoDb>;

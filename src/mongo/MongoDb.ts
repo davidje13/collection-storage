@@ -1,5 +1,6 @@
 import type { Db as MongoDbT, MongoClient as MongoClientT } from 'mongodb';
-import type { DB, DBKeys } from '../interfaces/DB';
+import type { DBKeys } from '../interfaces/DB';
+import BaseDB from '../interfaces/BaseDB';
 import type { IDable } from '../interfaces/IDable';
 import type MongoCollectionT from './MongoCollection';
 
@@ -7,13 +8,19 @@ function escapeName(name: string): string {
   return encodeURIComponent(name);
 }
 
-export default class MongoDb implements DB {
+export default class MongoDb extends BaseDB {
   private readonly stateRef = { closed: false };
 
   private constructor(
     private readonly client: MongoClientT,
-    private readonly MongoCollection: typeof MongoCollectionT,
-  ) {}
+    MongoCollection: typeof MongoCollectionT,
+  ) {
+    super((name, keys) => new MongoCollection(
+      this.client.db().collection(escapeName(name)),
+      keys,
+      this.stateRef,
+    ));
+  }
 
   public static async connect(url: string): Promise<MongoDb> {
     const { MongoClient } = await import('mongodb');
@@ -27,12 +34,8 @@ export default class MongoDb implements DB {
     return new MongoDb(client, MongoCollection);
   }
 
-  public getCollection<T extends IDable>(
-    name: string,
-    keys?: DBKeys<T>,
-  ): MongoCollectionT<T> {
-    const collection = this.client.db().collection(escapeName(name));
-    return new this.MongoCollection(collection, keys, this.stateRef);
+  public getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): MongoCollectionT<T> {
+    return super.getCollection(name, keys) as MongoCollectionT<T>;
   }
 
   public async close(): Promise<void> {

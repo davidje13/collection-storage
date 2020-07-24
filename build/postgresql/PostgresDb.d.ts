@@ -1,8 +1,9 @@
 import type { Pool as PgPoolT } from 'pg';
 import PostgresCollection from './PostgresCollection';
-import type { DB, DBKeys } from '../interfaces/DB';
+import type { DBKeys } from '../interfaces/DB';
+import BaseDB from '../interfaces/BaseDB';
 import type { IDable } from '../interfaces/IDable';
-export default class PostgresDb implements DB {
+export default class PostgresDb extends BaseDB {
     private readonly pool;
     private readonly stateRef;
     private constructor();

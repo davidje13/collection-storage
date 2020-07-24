@@ -1,7 +1,8 @@
 import { URL } from 'url';
 import MemoryCollection from './MemoryCollection';
-import type { DB, DBKeys } from '../interfaces/DB';
+import type { DBKeys } from '../interfaces/DB';
 import type { IDable } from '../interfaces/IDable';
+import BaseDB from '../interfaces/BaseDB';
 
 function getGlobal<T>(name: string, initial: T): T {
   const existing = (global as any)[name];
@@ -18,15 +19,11 @@ const globalDbs = getGlobal(
   new Map<string, MemoryDb>(),
 );
 
-export default class MemoryDb implements DB {
-  private readonly simulatedLatency: number;
-
-  private readonly mapTables = new Map<string, MemoryCollection<any>>();
-
+export default class MemoryDb extends BaseDB {
   private readonly stateRef = { closed: false };
 
   public constructor({ simulatedLatency = 0 } = {}) {
-    this.simulatedLatency = simulatedLatency;
+    super((name, keys) => new MemoryCollection(keys, simulatedLatency, this.stateRef));
   }
 
   public static connect(url: string): MemoryDb {
@@ -44,18 +41,8 @@ export default class MemoryDb implements DB {
     return db;
   }
 
-  public getCollection<T extends IDable>(
-    name: string,
-    keys?: DBKeys<T>,
-  ): MemoryCollection<T> {
-    if (!this.mapTables.has(name)) {
-      this.mapTables.set(name, new MemoryCollection(
-        keys,
-        this.simulatedLatency,
-        this.stateRef,
-      ));
-    }
-    return this.mapTables.get(name)! as MemoryCollection<T>;
+  public getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): MemoryCollection<T> {
+    return super.getCollection(name, keys) as MemoryCollection<T>;
   }
 
   public close(): void {

@@ -1,9 +1,8 @@
 import MemoryCollection from './MemoryCollection';
-import type { DB, DBKeys } from '../interfaces/DB';
+import type { DBKeys } from '../interfaces/DB';
 import type { IDable } from '../interfaces/IDable';
-export default class MemoryDb implements DB {
-    private readonly simulatedLatency;
-    private readonly mapTables;
+import BaseDB from '../interfaces/BaseDB';
+export default class MemoryDb extends BaseDB {
     private readonly stateRef;
     constructor({ simulatedLatency }?: {
         simulatedLatency?: number;

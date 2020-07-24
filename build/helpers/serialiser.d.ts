@@ -1,4 +1,5 @@
 /// <reference types="node" />
+export declare function canonicalJSON(o: Record<string, unknown> | undefined): string;
 export declare function serialiseValue(value: unknown): string;
 export declare function deserialiseValue(value: string): unknown;
 export declare function serialiseValueBin(value: unknown): Buffer;

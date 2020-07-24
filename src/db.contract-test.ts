@@ -70,7 +70,7 @@ export default ({
     const retrieved = await col.get('id', stored.id);
 
     expect(retrieved).toEqual(stored);
-    expect(retrieved === stored).toEqual(false);
+    expect(retrieved).not.toBe(stored);
   });
 
   it('allows special characters in collection names', async () => {
@@ -117,7 +117,7 @@ export default ({
     const retrieved = await complexCol.get('id', stored.id);
 
     expect(retrieved!.value).toEqual(stored.value);
-    expect(retrieved === stored).toEqual(false);
+    expect(retrieved).not.toBe(stored);
   });
 
   it('stores and retrieves binary data', async () => {
@@ -129,7 +129,7 @@ export default ({
     const retrieved = await complexCol.get('id', stored.id);
 
     expect([...retrieved!.value]).toEqual([...stored.value]);
-    expect(retrieved === stored).toEqual(false);
+    expect(retrieved).not.toBe(stored);
   });
 
   it('allows duplicates in non-unique indices and retrieves all', async () => {
@@ -154,13 +154,46 @@ export default ({
 
     await db.close();
 
-    let capturedError = null;
-    try {
-      await col.add({ id: '1', value: 'foo' });
-    } catch (e) {
-      capturedError = e;
-    }
-    expect(capturedError).not.toEqual(null);
+    await expect(col.add({ id: '1', value: 'foo' })).rejects.not.toBeNull();
+  });
+
+  it('returns the same collection object for subsequent requests', async () => {
+    const name = getUniqueName();
+    const col1 = db.getCollection(name);
+    const col2 = db.getCollection(name);
+
+    expect(col2).toBe(col1);
+
+    // TODO: this is necessary to ensure getCollection has done any async tasks
+    // but the DB should be responsible for doing this when close() is called
+    await col1.get('id', 'a');
+  });
+
+  it('rejects attempts to get the same collection with different key schemas', async () => {
+    const name = getUniqueName();
+    const keys1 = { idx: { unique: true } };
+    const keys2 = { value: { unique: true } };
+    const col1 = db.getCollection<TestType>(name, keys1);
+
+    expect(() => db.getCollection<TestType>(name, keys2)).toThrow();
+
+    // TODO: this is necessary to ensure getCollection has done any async tasks
+    // but the DB should be responsible for doing this when close() is called
+    await col1.get('id', 'a');
+  });
+
+  it('allows distinct keys for the same collection if they are equivalent', async () => {
+    const name = getUniqueName();
+    const keys1 = { idx: { unique: true }, value: { unique: true } };
+    const keys2 = { value: { unique: true }, idx: { unique: true } }; // same keys, different order
+    const col1 = db.getCollection<TestType>(name, keys1);
+    const col2 = db.getCollection<TestType>(name, keys2);
+
+    expect(col2).toBe(col1);
+
+    // TODO: this is necessary to ensure getCollection has done any async tasks
+    // but the DB should be responsible for doing this when close() is called
+    await col1.get('id', 'a');
   });
 
   describe('add', () => {
@@ -169,13 +202,7 @@ export default ({
 
       await col.add({ id: '2', value: 'bar' });
       await col.add({ id: '3', value: 'baz' });
-      let capturedError = null;
-      try {
-        await col.add({ id: '2', value: 'nope' });
-      } catch (e) {
-        capturedError = e;
-      }
-      expect(capturedError).not.toEqual(null);
+      await expect(col.add({ id: '2', value: 'nope' })).rejects.not.toBeNull();
     });
 
     it('rejects duplicates in unique indices', async () => {
@@ -185,13 +212,7 @@ export default ({
 
       await col.add({ id: '1', idx: 8 });
       await col.add({ id: '2', idx: 9 });
-      let capturedError = null;
-      try {
-        await col.add({ id: '3', idx: 8 });
-      } catch (e) {
-        capturedError = e;
-      }
-      expect(capturedError).not.toEqual(null);
+      await expect(col.add({ id: '3', idx: 8 })).rejects.not.toBeNull();
     });
   });
 
@@ -223,13 +244,7 @@ export default ({
     });
 
     it('rejects filters using unindexed keys', async () => {
-      let capturedError = null;
-      try {
-        await col.get('b', 'B1');
-      } catch (e) {
-        capturedError = e;
-      }
-      expect(capturedError).not.toEqual(null);
+      await expect(col.get('b', 'B1')).rejects.not.toBeNull();
     });
 
     it('returns null if no values match', async () => {
@@ -300,13 +315,7 @@ export default ({
     });
 
     it('rejects filters using unindexed keys', async () => {
-      let capturedError = null;
-      try {
-        await col.getAll('b', 'B1');
-      } catch (e) {
-        capturedError = e;
-      }
-      expect(capturedError).not.toEqual(null);
+      await expect(col.getAll('b', 'B1')).rejects.not.toBeNull();
     });
 
     it('returns an empty list if no values match', async () => {
@@ -347,13 +356,7 @@ export default ({
     });
 
     it('rejects and rolls-back changes which cause duplicates', async () => {
-      let capturedError = null;
-      try {
-        await col.update('id', '2', { a: 'A1' });
-      } catch (e) {
-        capturedError = e;
-      }
-      expect(capturedError).not.toEqual(null);
+      await expect(col.update('id', '2', { a: 'A1' })).rejects.not.toBeNull();
 
       const v2 = await col.get('id', '2');
       expect(v2!.a).toEqual('A2');
@@ -376,13 +379,7 @@ export default ({
     });
 
     it('rejects attempts to change the ID', async () => {
-      let capturedError = null;
-      try {
-        await col.update('id', '2', { id: '4' });
-      } catch (e) {
-        capturedError = e;
-      }
-      expect(capturedError).not.toEqual(null);
+      await expect(col.update('id', '2', { id: '4' })).rejects.not.toBeNull();
 
       const v2 = await col.get('id', '2');
       expect(v2).not.toEqual(null);
@@ -406,13 +403,7 @@ export default ({
     });
 
     it('rejects conflicts from changing multiple records', async () => {
-      let capturedError = null;
-      try {
-        await col.update('idxs', '2', { a: 'multi' });
-      } catch (e) {
-        capturedError = e;
-      }
-      expect(capturedError).not.toEqual(null);
+      await expect(col.update('idxs', '2', { a: 'multi' })).rejects.not.toBeNull();
       const [v2, v3] = await runAll([
         col.get('id', '2'),
         col.get('id', '3'),
@@ -442,13 +433,7 @@ export default ({
     });
 
     it('rejects filters using unindexed keys', async () => {
-      let capturedError = null;
-      try {
-        await col.update('b', 'B2', { a: 'updated' });
-      } catch (e) {
-        capturedError = e;
-      }
-      expect(capturedError).not.toEqual(null);
+      await expect(col.update('b', 'B2', { a: 'updated' })).rejects.not.toBeNull();
     });
 
     describe('upsert', () => {
@@ -470,25 +455,13 @@ export default ({
 
       it('rejects attempts to upsert using a non-ID index', async () => {
         const data = { id: '6', idxs: 'w', a: 'y', b: 'z' };
-        let capturedError = null;
-        try {
-          await col.update('a', 'x', data, { upsert: true });
-        } catch (e) {
-          capturedError = e;
-        }
-        expect(capturedError).not.toEqual(null);
+        await expect(col.update('a', 'x', data, { upsert: true })).rejects.not.toBeNull();
         const all = await col.getAll();
         expect(all.length).toEqual(3);
       });
 
       it('rejects duplicates if no value matches', async () => {
-        let capturedError = null;
-        try {
-          await col.update('id', '6', { a: 'A2' }, { upsert: true });
-        } catch (e) {
-          capturedError = e;
-        }
-        expect(capturedError).not.toEqual(null);
+        await expect(col.update('id', '6', { a: 'A2' }, { upsert: true })).rejects.not.toBeNull();
         const all = await col.getAll();
         expect(all.length).toEqual(3);
       });
@@ -545,13 +518,7 @@ export default ({
     });
 
     it('rejects filters using unindexed keys', async () => {
-      let capturedError = null;
-      try {
-        await col.remove('b', 'B2');
-      } catch (e) {
-        capturedError = e;
-      }
-      expect(capturedError).not.toEqual(null);
+      await expect(col.remove('b', 'B2')).rejects.not.toBeNull();
     });
   });
 

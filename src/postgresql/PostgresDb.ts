@@ -1,14 +1,17 @@
 import type { Pool as PgPoolT } from 'pg';
 import PostgresCollection from './PostgresCollection';
-import type { DB, DBKeys } from '../interfaces/DB';
+import type { DBKeys } from '../interfaces/DB';
+import BaseDB from '../interfaces/BaseDB';
 import type { IDable } from '../interfaces/IDable';
 
-export default class PostgresDb implements DB {
+export default class PostgresDb extends BaseDB {
   private readonly stateRef = { closed: false };
 
   private constructor(
     private readonly pool: PgPoolT,
-  ) {}
+  ) {
+    super((name, keys) => new PostgresCollection(pool, name, keys, this.stateRef));
+  }
 
   public static async connect(url: string): Promise<PostgresDb> {
     const { Pool } = await import('pg');
@@ -17,11 +20,8 @@ export default class PostgresDb implements DB {
     return new PostgresDb(pool);
   }
 
-  public getCollection<T extends IDable>(
-    name: string,
-    keys?: DBKeys<T>,
-  ): PostgresCollection<T> {
-    return new PostgresCollection(this.pool, name, keys, this.stateRef);
+  public getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): PostgresCollection<T> {
+    return super.getCollection(name, keys) as PostgresCollection<T>;
   }
 
   public close(): Promise<void> {
