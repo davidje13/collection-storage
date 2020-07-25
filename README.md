@@ -4,8 +4,8 @@ Provides an abstraction layer around communication with a
 collection-based database. This makes switching database choices easier
 during deployments and testing.
 
-Currently supports MongoDB, Redis (experimental), PostgreSQL, and in-memory
-storage.
+Currently supports MongoDB, DynamoDB, Redis (experimental), PostgreSQL, and
+in-memory storage.
 
 ## Install dependency
 
@@ -39,6 +39,9 @@ npm install --save pg
 
 **note**: Though PostgreSQL is supported, it is not optimised for this type of
 data storage. If possible, use one of the NoSQL options instead.
+
+You do not need any additional dependencies to connect to an in-memory or
+DynamoDB database.
 
 ## Usage
 
@@ -118,6 +121,21 @@ mongodb://[username:password@]host1[:port1][,...hostN[:portN]]][/[database][?opt
 
 See the [mongo documentation](https://docs.mongodb.com/manual/reference/connection-string/)
 for full details.
+
+### DynamoDB
+
+```
+dynamodb://[key:secret@]dynamodb.region.amazonaws.com[:port]/[table-prefix-][?options]
+```
+
+See the [AWS documentation](https://docs.aws.amazon.com/general/latest/gr/rande.html)
+for a list of region names. Requests will use `https` by default. Specify
+`tls=false` in the options to switch to `http` (e.g. when using DynamoDB
+Local for testing.)
+
+By default, eventually-consistent reads are used. To use strongly-consistent
+reads, specify `consistentRead=true` (note that this will use twice as much
+read capacity for the same operations).
 
 ### Redis
 
@@ -513,12 +531,13 @@ derive new values).
 ## Development
 
 To run the test suite, you will need to have a local installation of MongoDB,
-Redis and PostgreSQL. By default, the tests will connect to
+Redis, PostgreSQL and DynamoDB Local. By default, the tests will connect to
 `mongodb://localhost:27017/collection-storage-tests`,
-`redis://localhost:6379/15`, and
-`postgresql://localhost:5432/collection-storage-tests`. You can change this if
-required by setting the `MONGO_URL`, `REDIS_URL`, and `PSQL_URL` environment
-variables.
+`redis://localhost:6379/15`,
+`postgresql://localhost:5432/collection-storage-tests`, and
+`dynamodb://key:secret@localhost:8000/collection-storage-tests-?tls=false`.
+You can change this if required by setting the `MONGO_URL`, `REDIS_URL`,
+`PSQL_URL`, and `DDB_URL` environment variables.
 
 **warning**: By default, this will flush any Redis database at index 15. If
 you have used database 15 for your own data, you should set `REDIS_URL` to
@@ -549,4 +568,5 @@ Or portably using Docker:
 docker run -d mongo:4
 docker run -d redis:5-alpine
 docker run -d postgres:11-alpine
+docker run -d -p 8000:8000 amazon/dynamodb-local:latest
 ```

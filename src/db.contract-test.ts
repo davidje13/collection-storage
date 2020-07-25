@@ -33,9 +33,10 @@ function getUniqueName(): string {
   return `test-${time.substr(time.length - 7)}${random}`;
 }
 
-interface ConfigT {
+interface ConfigT<T extends DB> {
   beforeAll?: () => Promise<void> | void;
-  factory: () => Promise<DB> | DB;
+  factory: () => Promise<T> | T;
+  afterEach?: (db: T) => Promise<void> | void;
   afterAll?: () => Promise<void> | void;
   testMigration?: boolean;
 }
@@ -56,13 +57,14 @@ function makeFailedDB<T extends DB>(e: unknown): T {
 }
 
 // eslint-disable-next-line jest/no-export
-export default ({
+export default <T extends DB>({
   beforeAll: beforeAllFn = nop,
   factory,
+  afterEach: afterEachFn = nop,
   afterAll: afterAllFn = nop,
   testMigration = true,
-}: ConfigT): void => {
-  let db: DB;
+}: ConfigT<T>): void => {
+  let db: T;
   let col: Collection<TestType>;
 
   beforeAll(beforeAllFn);
@@ -78,6 +80,7 @@ export default ({
   });
 
   afterEach(async () => {
+    await afterEachFn(db);
     await db.close();
   });
 
@@ -466,6 +469,13 @@ export default ({
         expect(v!.b).toEqual('updated');
         const all = await col.getAll();
         expect(all.length).toEqual(3);
+      });
+
+      it('preserves unmodified values when updating', async () => {
+        await col.update('id', '2', { b: 'updated' }, { upsert: true });
+
+        const v = await col.get('id', '2');
+        expect(v!.a).toEqual('A2');
       });
 
       it('adds a new record if no value matches using key ID', async () => {
