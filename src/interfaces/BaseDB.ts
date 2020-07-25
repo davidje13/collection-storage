@@ -16,8 +16,6 @@ export default abstract class BaseDB implements DB {
 
   private readonly collectionCache = new Map<string, [string, Collection<any>]>();
 
-  private readonly closeReadiness: Promise<void>[] = [];
-
   constructor(
     private readonly makeCollection: <T extends IDable>(
       name: string,
@@ -36,9 +34,6 @@ export default abstract class BaseDB implements DB {
       return cachedCol;
     }
     const created = this.makeCollection(name, keys) as AsyncCollection<T>;
-    if (created.internalReady) {
-      this.closeReadiness.push(created.internalReady());
-    }
     this.collectionCache.set(name, [normKeys, created]);
     return created;
   }
@@ -48,8 +43,8 @@ export default abstract class BaseDB implements DB {
       return undefined;
     }
     this.syncClose();
-    const toAwait = this.closeReadiness.slice();
-    this.closeReadiness.length = 0;
+    const toAwait = [...this.collectionCache.values()]
+      .map(([, c]) => (c as AsyncCollection<IDable>).internalReady?.());
     return Promise.allSettled(toAwait).then(() => this.internalClose());
   }
 

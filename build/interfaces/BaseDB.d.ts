@@ -8,7 +8,6 @@ export default abstract class BaseDB implements DB {
     private readonly makeCollection;
     protected readonly stateRef: StateRef;
     private readonly collectionCache;
-    private readonly closeReadiness;
     constructor(makeCollection: <T extends IDable>(name: string, keys?: DBKeys<T>) => Collection<T>);
     getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): Collection<T>;
     close(): Promise<void> | void;
