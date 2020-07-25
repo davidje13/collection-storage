@@ -26,11 +26,11 @@ export default class RedisDb extends BaseDB {
     return super.getCollection(name, keys) as RedisCollection<T>;
   }
 
-  public close(): Promise<void> {
-    return this.pool.close();
-  }
-
   public getConnectionPool(): RedisConnectionPool {
     return this.pool;
+  }
+
+  protected internalClose(): Promise<void> {
+    return this.pool.close();
   }
 }

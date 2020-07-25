@@ -9,8 +9,6 @@ function escapeName(name: string): string {
 }
 
 export default class MongoDb extends BaseDB {
-  private readonly stateRef = { closed: false };
-
   private constructor(
     private readonly client: MongoClientT,
     MongoCollection: typeof MongoCollectionT,
@@ -38,12 +36,11 @@ export default class MongoDb extends BaseDB {
     return super.getCollection(name, keys) as MongoCollectionT<T>;
   }
 
-  public async close(): Promise<void> {
-    this.stateRef.closed = true;
-    return this.client.close();
-  }
-
   public getDb(): MongoDbT {
     return this.client.db();
+  }
+
+  protected internalClose(): Promise<void> {
+    return this.client.close();
   }
 }

@@ -5,8 +5,6 @@ import BaseDB from '../interfaces/BaseDB';
 import type { IDable } from '../interfaces/IDable';
 
 export default class PostgresDb extends BaseDB {
-  private readonly stateRef = { closed: false };
-
   private constructor(
     private readonly pool: PgPoolT,
   ) {
@@ -24,15 +22,11 @@ export default class PostgresDb extends BaseDB {
     return super.getCollection(name, keys) as PostgresCollection<T>;
   }
 
-  public close(): Promise<void> {
-    if (this.stateRef.closed) {
-      return Promise.resolve();
-    }
-    this.stateRef.closed = true;
-    return this.pool.end();
-  }
-
   public getConnectionPool(): PgPoolT {
     return this.pool;
+  }
+
+  protected internalClose(): Promise<void> {
+    return this.pool.end();
   }
 }

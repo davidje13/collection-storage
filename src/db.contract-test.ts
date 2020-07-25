@@ -151,10 +151,24 @@ export default ({
 
   it('rejects access after closing', async () => {
     col = db.getCollection(getUniqueName());
+    await col.add({ id: '1', value: 'foo' });
 
     await db.close();
 
+    await expect(col.add({ id: '2', value: 'bar' })).rejects.not.toBeNull();
+  });
+
+  it('survives immediate database closure', async () => {
+    // create a complex collection which will often need database setup at construction time:
+    col = db.getCollection(getUniqueName(), { idx: {}, value: { unique: true } });
+    await db.close(); // close before database setup has completed
+
     await expect(col.add({ id: '1', value: 'foo' })).rejects.not.toBeNull();
+  });
+
+  it('ignores duplicate close() calls', async () => {
+    await db.close();
+    expect(db.close()).not.toBeInstanceOf(Promise);
   });
 
   it('returns the same collection object for subsequent requests', async () => {
@@ -163,23 +177,15 @@ export default ({
     const col2 = db.getCollection(name);
 
     expect(col2).toBe(col1);
-
-    // TODO: this is necessary to ensure getCollection has done any async tasks
-    // but the DB should be responsible for doing this when close() is called
-    await col1.get('id', 'a');
   });
 
   it('rejects attempts to get the same collection with different key schemas', async () => {
     const name = getUniqueName();
     const keys1 = { idx: { unique: true } };
     const keys2 = { value: { unique: true } };
-    const col1 = db.getCollection<TestType>(name, keys1);
+    db.getCollection<TestType>(name, keys1);
 
     expect(() => db.getCollection<TestType>(name, keys2)).toThrow();
-
-    // TODO: this is necessary to ensure getCollection has done any async tasks
-    // but the DB should be responsible for doing this when close() is called
-    await col1.get('id', 'a');
   });
 
   it('allows distinct keys for the same collection if they are equivalent', async () => {
@@ -190,10 +196,6 @@ export default ({
     const col2 = db.getCollection<TestType>(name, keys2);
 
     expect(col2).toBe(col1);
-
-    // TODO: this is necessary to ensure getCollection has done any async tasks
-    // but the DB should be responsible for doing this when close() is called
-    await col1.get('id', 'a');
   });
 
   describe('add', () => {

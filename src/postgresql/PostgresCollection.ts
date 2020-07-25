@@ -2,6 +2,7 @@ import type { Pool as PgPoolT, QueryArrayResult as PgQueryArrayResultT } from 'p
 import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
 import type { DBKeys } from '../interfaces/DB';
+import type { StateRef } from '../interfaces/BaseDB';
 import { serialiseValue, deserialiseValue, serialiseRecord } from '../helpers/serialiser';
 import { encodeHStore, decodeHStore } from './hstore';
 import { withIdentifiers, quoteValue } from './sql';
@@ -33,10 +34,6 @@ const STATEMENTS = {
   DELETE: 'DELETE FROM $T WHERE data->$1=$2',
   DELETE_ID: 'DELETE FROM $T WHERE id=$1',
 };
-
-interface State {
-  closed: boolean;
-}
 
 async function configureTable(
   pool: PgPoolT,
@@ -110,32 +107,15 @@ function fromHStore<T>(
 export default class PostgresCollection<T extends IDable> extends BaseCollection<T> {
   private readonly cachedQueries: Partial<Record<keyof typeof STATEMENTS, string>> = {};
 
-  private pending?: (() => void)[] = [];
-
   public constructor(
     private readonly pool: PgPoolT,
     private readonly tableName: string,
     keys: DBKeys<T> = {},
-    private readonly stateRef: State = { closed: false },
+    private readonly stateRef: StateRef = { closed: false },
   ) {
     super(keys);
 
-    configureTable(pool, tableName, keys)
-      .then(() => {
-        if (this.pending) {
-          this.pending.forEach((f) => f());
-          this.pending = undefined;
-        }
-      })
-      .catch((e) => {
-        process.stderr.write(`Failed to prepare table ${tableName}: ${e}`);
-      });
-  }
-
-  protected preAct(): void {
-    if (this.stateRef.closed) {
-      throw new Error('Connection closed');
-    }
+    this.initAsync(configureTable(pool, tableName, keys));
   }
 
   protected async internalAdd({ id, ...rest }: T): Promise<void> {
@@ -219,14 +199,12 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
     return raw.rowCount;
   }
 
-  private async runTableQuery(
+  private runTableQuery(
     queryName: keyof typeof STATEMENTS,
     ...values: any[]
   ): Promise<PgQueryArrayResultT<any[]>> {
-    if (this.pending) {
-      await new Promise((resolve): void => {
-        this.pending!.push(resolve);
-      });
+    if (this.stateRef.closed) {
+      throw new Error('Connection closed');
     }
 
     let cached = this.cachedQueries[queryName];

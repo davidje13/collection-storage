@@ -20,8 +20,6 @@ const globalDbs = getGlobal(
 );
 
 export default class MemoryDb extends BaseDB {
-  private readonly stateRef = { closed: false };
-
   public constructor({ simulatedLatency = 0 } = {}) {
     super((name, keys) => new MemoryCollection(keys, simulatedLatency, this.stateRef));
   }
@@ -46,6 +44,6 @@ export default class MemoryDb extends BaseDB {
   }
 
   public close(): void {
-    this.stateRef.closed = true;
+    this.syncClose();
   }
 }

@@ -3,12 +3,19 @@ import type { IDable } from './IDable';
 import type { DBKeys } from './DB';
 
 export default abstract class BaseCollection<T extends IDable> implements Collection<T> {
+  // actually read publicly by BaseDB but we don't want this to be a user-accessible property
+  protected internalReady?: () => Promise<void>;
+
+  private innerPreAct: () => Promise<void> | void;
+
   protected constructor(
     protected readonly keys: DBKeys<T>,
-  ) {}
+  ) {
+    this.innerPreAct = this.preAct.bind(this);
+  }
 
   public async add(entry: T): Promise<void> {
-    await this.preAct();
+    await this.innerPreAct();
     return this.internalAdd(entry);
   }
 
@@ -23,7 +30,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     if (!this.isIndexed(searchAttribute)) {
       throw new Error(`No index for ${searchAttribute}`);
     }
-    await this.preAct();
+    await this.innerPreAct();
     return this.internalGet(searchAttribute, searchValue, returnAttributes);
   }
 
@@ -38,7 +45,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     if (searchAttribute && !this.isIndexed(searchAttribute)) {
       throw new Error(`No index for ${searchAttribute}`);
     }
-    await this.preAct();
+    await this.innerPreAct();
     return this.internalGetAll(searchAttribute, searchValue, returnAttributes);
   }
 
@@ -60,7 +67,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
         withoutId = { ...update };
         delete withoutId.id;
       }
-      await this.preAct();
+      await this.innerPreAct();
       return this.internalUpsert(searchValue as T['id'], withoutId, options);
     }
     if (!this.isIndexed(searchAttribute)) {
@@ -73,7 +80,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
       throw new Error('duplicate');
     }
 
-    await this.preAct();
+    await this.innerPreAct();
     return this.internalUpdate(searchAttribute, searchValue, update, options);
   }
 
@@ -84,8 +91,35 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     if (!this.isIndexed(searchAttribute)) {
       throw new Error(`No index for ${searchAttribute}`);
     }
-    await this.preAct();
+    await this.innerPreAct();
     return this.internalRemove(searchAttribute, searchValue);
+  }
+
+  // Subclass constructors can call this with a promise that will resolve when
+  // they are ready to be used. BaseCollection will automatically ensure that
+  // other interactions are queued until this promise resolves.
+  // (this call will always succeed; you can safely ignore the promise returned)
+  protected async initAsync(wait: Promise<unknown>): Promise<void> {
+    const pending: [() => void, (e: Error) => void][] = [];
+    const addPending = (): Promise<void> => new Promise((resolve, reject) => {
+      pending.push([resolve, reject]);
+    });
+    this.internalReady = addPending;
+    this.innerPreAct = async (): Promise<void> => {
+      await addPending();
+      return this.preAct();
+    };
+    try {
+      await wait;
+    } catch (e) {
+      this.internalReady = (): Promise<void> => Promise.reject(e);
+      this.innerPreAct = (): void => { throw e; };
+      pending.forEach((f) => f[1](e));
+      return;
+    }
+    this.internalReady = undefined;
+    this.innerPreAct = this.preAct.bind(this);
+    pending.forEach((f) => f[0]());
   }
 
   protected isIndexed(attribute: string): boolean {

@@ -1,6 +1,7 @@
 import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
 import type { DBKeys } from '../interfaces/DB';
+import type { StateRef } from '../interfaces/BaseDB';
 import {
   serialiseValue,
   serialiseRecord,
@@ -30,10 +31,6 @@ function applyFilter<T, F extends readonly (keyof T)[]>(
   return result;
 }
 
-interface State {
-  closed: boolean;
-}
-
 export default class MemoryCollection<T extends IDable> extends BaseCollection<T> {
   private readonly data: Map<string, Record<string, string>>;
 
@@ -42,7 +39,7 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
   public constructor(
     keys: DBKeys<T> = {},
     private readonly simulatedLatency = 0,
-    private readonly stateRef: State = { closed: false },
+    private readonly stateRef: StateRef = { closed: false },
   ) {
     super(keys);
 

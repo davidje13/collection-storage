@@ -5,14 +5,11 @@ import {
 import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
 import type { DBKeys } from '../interfaces/DB';
+import type { StateRef } from '../interfaces/BaseDB';
 import retry from '../helpers/retry';
 
 const MONGO_ID = '_id';
 const ID = 'id';
-
-interface State {
-  closed: boolean;
-}
 
 const DOT_REG = /\./g;
 function fieldNameToMongo(name: string): string {
@@ -86,30 +83,35 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
   public constructor(
     private readonly collection: MCollection,
     keys: DBKeys<T> = {},
-    private readonly stateRef: State = { closed: false },
+    private readonly stateRef: StateRef = { closed: false },
   ) {
     super(keys);
-    Object.keys(keys).forEach((k) => {
+    this.initAsync(Promise.all(Object.keys(keys).map((k) => {
       const keyName = k as keyof DBKeys<T>;
       const options = keys[keyName];
       const mongoKey = fieldNameToMongo(keyName);
       if (options?.unique) {
-        collection.createIndex({ [mongoKey]: 1 }, { unique: true });
-      } else {
-        collection.createIndex({ [mongoKey]: 'hashed' });
+        return collection.createIndex({ [mongoKey]: 1 }, { unique: true });
       }
-    });
+      return collection.createIndex({ [mongoKey]: 'hashed' });
+    })));
+  }
+
+  protected preAct(): void {
+    if (this.stateRef.closed) {
+      throw new Error('Connection closed');
+    }
   }
 
   protected async internalAdd(value: T): Promise<void> {
-    await this.getCollection().insertOne(convertToMongo(value));
+    await this.collection.insertOne(convertToMongo(value));
   }
 
   protected async internalUpsert(
     id: T['id'],
     update: Partial<T>,
   ): Promise<void> {
-    await withUpsertRetry(() => this.getCollection().updateOne(
+    await withUpsertRetry(() => this.collection.updateOne(
       convertToMongo({ id }),
       { $set: convertToMongo(update) },
       { upsert: true },
@@ -124,9 +126,9 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
     const query = convertToMongo({ [searchAttribute]: searchValue });
     const mongoUpdate = { $set: convertToMongo(update) };
     if (this.isIndexUnique(searchAttribute)) {
-      await this.getCollection().updateOne(query, mongoUpdate);
+      await this.collection.updateOne(query, mongoUpdate);
     } else {
-      await this.getCollection().updateMany(query, mongoUpdate);
+      await this.collection.updateMany(query, mongoUpdate);
     }
   }
 
@@ -138,7 +140,7 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
     searchValue: T[K],
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
-    const raw = await this.getCollection().findOne(
+    const raw = await this.collection.findOne(
       convertToMongo({ [searchAttribute]: searchValue }),
       { projection: makeMongoProjection(returnAttributes) },
     );
@@ -153,7 +155,7 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
     searchValue?: T[K],
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
-    const cursor = this.getCollection().find(
+    const cursor = this.collection.find(
       searchAttribute ? convertToMongo({ [searchAttribute]: searchValue }) : {},
       { projection: makeMongoProjection(returnAttributes) },
     );
@@ -168,16 +170,9 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<number> {
-    const result = await this.getCollection().deleteMany(
+    const result = await this.collection.deleteMany(
       convertToMongo({ [searchAttribute]: searchValue }),
     );
     return result.deletedCount || 0;
-  }
-
-  private getCollection(): MCollection {
-    if (this.stateRef.closed) {
-      throw new Error('Connection closed');
-    }
-    return this.collection;
   }
 }

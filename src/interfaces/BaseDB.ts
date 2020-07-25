@@ -3,8 +3,20 @@ import type { IDable } from './IDable';
 import type { DB, DBKeys } from './DB';
 import { canonicalJSON } from '../helpers/serialiser';
 
+export interface StateRef {
+  closed: boolean;
+}
+
+interface AsyncCollection<T extends IDable> extends Collection<T> {
+  internalReady?: () => Promise<void>;
+}
+
 export default abstract class BaseDB implements DB {
+  protected readonly stateRef: StateRef = { closed: false };
+
   private readonly collectionCache = new Map<string, [string, Collection<any>]>();
+
+  private readonly closeReadiness: Promise<void>[] = [];
 
   constructor(
     private readonly makeCollection: <T extends IDable>(
@@ -23,10 +35,28 @@ export default abstract class BaseDB implements DB {
       }
       return cachedCol;
     }
-    const created = this.makeCollection(name, keys);
+    const created = this.makeCollection(name, keys) as AsyncCollection<T>;
+    if (created.internalReady) {
+      this.closeReadiness.push(created.internalReady());
+    }
     this.collectionCache.set(name, [normKeys, created]);
     return created;
   }
 
-  abstract close(): Promise<void> | void;
+  close(): Promise<void> | void {
+    if (this.stateRef.closed) {
+      return undefined;
+    }
+    this.syncClose();
+    const toAwait = this.closeReadiness.slice();
+    this.closeReadiness.length = 0;
+    return Promise.allSettled(toAwait).then(() => this.internalClose());
+  }
+
+  protected syncClose(): void {
+    this.stateRef.closed = true;
+  }
+
+  // eslint-disable-next-line class-methods-use-this
+  protected internalClose(): Promise<void> | void {}
 }

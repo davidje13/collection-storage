@@ -5,11 +5,10 @@ import BaseDB from '../interfaces/BaseDB';
 import type { IDable } from '../interfaces/IDable';
 export default class PostgresDb extends BaseDB {
     private readonly pool;
-    private readonly stateRef;
     private constructor();
     static connect(url: string): Promise<PostgresDb>;
     getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): PostgresCollection<T>;
-    close(): Promise<void>;
     getConnectionPool(): PgPoolT;
+    protected internalClose(): Promise<void>;
 }
 //# sourceMappingURL=PostgresDb.d.ts.map

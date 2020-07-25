@@ -8,7 +8,7 @@ export default class RedisDb extends BaseDB {
     private constructor();
     static connect(url: string): Promise<RedisDb>;
     getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): RedisCollection<T>;
-    close(): Promise<void>;
     getConnectionPool(): RedisConnectionPool;
+    protected internalClose(): Promise<void>;
 }
 //# sourceMappingURL=RedisDb.d.ts.map
