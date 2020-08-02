@@ -37,6 +37,7 @@ interface ConfigT {
   beforeAll?: () => Promise<void> | void;
   factory: () => Promise<DB> | DB;
   afterAll?: () => Promise<void> | void;
+  testMigration?: boolean;
 }
 
 const nop = (): void => undefined;
@@ -46,6 +47,7 @@ export default ({
   beforeAll: beforeAllFn = nop,
   factory,
   afterAll: afterAllFn = nop,
+  testMigration = true,
 }: ConfigT): void => {
   let db: DB;
   let col: Collection<TestType>;
@@ -569,4 +571,104 @@ export default ({
       });
     });
   });
+
+  if (testMigration) {
+    describe('data migration', () => {
+      /* eslint-disable object-curly-newline */ // tabular data
+
+      let name: string;
+      let db2: DB;
+      let col2: Collection<TestType>;
+
+      beforeEach(async () => {
+        name = getUniqueName();
+        db2 = await factory();
+
+        col = db.getCollection(name, { idx: {}, value: { unique: true } });
+        await col.add({ id: '1', idx: 1, value: 'v1', a: 'a1', b: 'b1' });
+        await col.add({ id: '2', idx: 2, value: 'v2', a: 'a2', b: 'b2' });
+        await col.add({ id: '3', idx: 3, value: 'v3', a: 'a2', b: 'b3' });
+      });
+
+      afterEach(async () => {
+        await db2.close();
+      });
+
+      it('adds indices', async () => {
+        col2 = db2.getCollection(name, { idx: {}, value: { unique: true }, idxs: {} });
+
+        await col2.add({ id: '4', idx: 4, value: 'v4', a: 'a4', b: 'b4', idxs: 's4' });
+
+        expect(new Set(await col2.getAll('idxs', 's4'))).toEqual(new Set([
+          { id: '4', idx: 4, value: 'v4', a: 'a4', b: 'b4', idxs: 's4' },
+        ]));
+      });
+
+      it('adds indices with existing data', async () => {
+        col2 = db2.getCollection(name, { idx: {}, value: { unique: true }, a: {} });
+
+        await col2.add({ id: '4', idx: 4, value: 'v4', a: 'a1', b: 'b4' });
+
+        expect(new Set(await col2.getAll('a', 'a2'))).toEqual(new Set([
+          { id: '2', idx: 2, value: 'v2', a: 'a2', b: 'b2' },
+          { id: '3', idx: 3, value: 'v3', a: 'a2', b: 'b3' },
+        ]));
+      });
+
+      it('adds unique indices with existing data', async () => {
+        col2 = db2.getCollection(name, { idx: {}, value: { unique: true }, b: { unique: true } });
+
+        await expect(col2.add({ id: '4', idx: 4, value: 'v4', a: 'a4', b: 'b3' })).rejects.not.toBeNull();
+
+        expect(new Set(await col2.getAll('b', 'b2'))).toEqual(new Set([
+          { id: '2', idx: 2, value: 'v2', a: 'a2', b: 'b2' },
+        ]));
+      });
+
+      it('adds uniqueness to existing indices', async () => {
+        col2 = db2.getCollection(name, { idx: { unique: true }, value: { unique: true } });
+
+        await expect(col2.add({ id: '4', idx: 3, value: 'v4', a: 'a4', b: 'b4' })).rejects.not.toBeNull();
+
+        expect(new Set(await col2.getAll('idx', 2))).toEqual(new Set([
+          { id: '2', idx: 2, value: 'v2', a: 'a2', b: 'b2' },
+        ]));
+      });
+
+      it('throws if duplicate values exist when adding uniqueness', async () => {
+        await col.add({ id: '4', idx: 3, value: 'v4', a: 'a4', b: 'b4' });
+
+        col2 = db2.getCollection(name, { idx: { unique: true }, value: { unique: true } });
+        // exception is asynchronous, so will not be seen until first operation:
+        await expect(col2.getAll()).rejects.not.toBeNull();
+      });
+
+      it('removes uniqueness from existing indices', async () => {
+        col2 = db2.getCollection(name, { idx: {}, value: {} });
+
+        await col2.add({ id: '4', idx: 4, value: 'v3', a: 'a4', b: 'b4' });
+
+        expect(new Set(await col2.getAll('value', 'v3'))).toEqual(new Set([
+          { id: '3', idx: 3, value: 'v3', a: 'a2', b: 'b3' },
+          { id: '4', idx: 4, value: 'v3', a: 'a4', b: 'b4' },
+        ]));
+      });
+
+      it('removes indices', async () => {
+        col2 = db2.getCollection(name, { value: { unique: true } });
+
+        await expect(col2.getAll('idx', 1)).rejects.not.toBeNull();
+      });
+
+      it('removes unique indices', async () => {
+        col2 = db2.getCollection(name, { idx: {} });
+
+        await col2.add({ id: '4', idx: 4, value: 'v3', a: 'a4', b: 'b4' });
+
+        await expect(col2.getAll('value', 'v2')).rejects.not.toBeNull();
+      });
+
+      /* eslint-enable object-curly-newline */
+    });
+  }
 };

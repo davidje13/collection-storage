@@ -1,9 +1,11 @@
 import {
   Collection as MCollection,
   Binary as MBinary,
+  IndexSpecification,
 } from 'mongodb';
 import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
+import type { KeyOptions } from '../interfaces/Collection';
 import type { DBKeys } from '../interfaces/DB';
 import type { StateRef } from '../interfaces/BaseDB';
 import retry from '../helpers/retry';
@@ -79,6 +81,61 @@ function makeMongoProjection(
   return projection;
 }
 
+interface MongoIndex {
+  name: string;
+  key: Record<string, -1 | 0 | 1 | 'hashed'>;
+  unique?: boolean;
+}
+
+function makeIndex(keyName: string, options: KeyOptions = {}): IndexSpecification {
+  const unique = Boolean(options.unique);
+  const mongoKey = fieldNameToMongo(keyName);
+  return {
+    key: { [mongoKey]: unique ? 1 : 'hashed' },
+    unique,
+  };
+}
+
+function indicesMatch(a: IndexSpecification, b: IndexSpecification): boolean {
+  if (Boolean(a.unique) !== Boolean(b.unique)) {
+    return false;
+  }
+  const aKey = a.key as Record<string, unknown>;
+  const bKey = b.key as Record<string, unknown>;
+  const keys = Object.keys(aKey);
+  if (Object.keys(bKey).length !== keys.length) {
+    return false;
+  }
+  return keys.every((k) => (aKey[k] === bKey[k]));
+}
+
+async function configureCollection(
+  collection: MCollection,
+  keys: DBKeys<any> = {},
+): Promise<void> {
+  const existing: MongoIndex[] = await collection.indexes().catch(() => []);
+  const idxToCreate: IndexSpecification[] = [];
+  const idxToDelete = new Set(existing.map((idx) => idx.name));
+  idxToDelete.delete('_id_'); // MongoDB implicit primary key
+
+  Object.keys(keys)
+    .map((keyName) => makeIndex(keyName, keys[keyName]))
+    .forEach((index) => {
+      const match = existing.find((idx) => indicesMatch(idx, index));
+      if (match) {
+        idxToDelete.delete(match.name);
+      } else {
+        idxToCreate.push(index);
+      }
+    });
+  if (idxToCreate.length) {
+    await collection.createIndexes(idxToCreate);
+  }
+  if (idxToDelete.size) {
+    await Promise.all([...idxToDelete].map((idxName) => collection.dropIndex(idxName)));
+  }
+}
+
 export default class MongoCollection<T extends IDable> extends BaseCollection<T> {
   public constructor(
     private readonly collection: MCollection,
@@ -86,15 +143,7 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
     private readonly stateRef: StateRef = { closed: false },
   ) {
     super(keys);
-    this.initAsync(Promise.all(Object.keys(keys).map((k) => {
-      const keyName = k as keyof DBKeys<T>;
-      const options = keys[keyName];
-      const mongoKey = fieldNameToMongo(keyName);
-      if (options?.unique) {
-        return collection.createIndex({ [mongoKey]: 1 }, { unique: true });
-      }
-      return collection.createIndex({ [mongoKey]: 'hashed' });
-    })));
+    this.initAsync(configureCollection(collection, keys));
   }
 
   protected preAct(): void {

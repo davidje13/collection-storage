@@ -4,6 +4,7 @@ import contract from '../db.contract-test';
 describe('MemoryDb', () => {
   contract({
     factory: (): MemoryDb => MemoryDb.connect('memory://?simulatedLatency=20'),
+    testMigration: false,
   });
 
   it('shares data between databases with the same name', async () => {

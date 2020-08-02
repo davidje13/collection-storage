@@ -76,6 +76,19 @@ async function example() {
 }
 ```
 
+The unindexed properties of your items do not need to be consistent.
+In particular, this means that later versions of your application are
+free to change the unindexed attributes, and both versions can
+co-exist (see [migrate](#migrated) below for details on enabling
+automatic migrations on a per-record basis).
+
+The MongoDB and PostgreSQL databases support changing indices in any
+way at a later point. In a later deploy, you can simply create your
+collection with different indices, and the necessary changes will
+happen automatically. Note that Redis does not currently support
+changing or removing existing indices, and will not index existing
+data if a new index is added.
+
 ## Connection Strings
 
 ### In-memory

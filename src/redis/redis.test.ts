@@ -10,4 +10,5 @@ describe('RedisDb', () => contract({
     await db.close();
   },
   factory: (): Promise<RedisDb> => RedisDb.connect(url),
+  testMigration: false, // index migrations are not currently supported by the Redis integration
 }));

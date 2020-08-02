@@ -15,6 +15,8 @@ const STATEMENTS = {
     ')',
   ].join(''),
 
+  GET_INDEX_NAMES: 'SELECT indexname FROM pg_indexes WHERE tablename=$1 AND schemaname=current_schema()',
+
   CREATE_INDEX: 'CREATE INDEX IF NOT EXISTS $I ON $T USING HASH ((data->$1))',
   CREATE_UNIQUE_INDEX: 'CREATE UNIQUE INDEX IF NOT EXISTS $I ON $T ((data->$1))',
   DROP_INDEX: 'DROP INDEX IF EXISTS $I',
@@ -42,37 +44,56 @@ async function configureTable(
 ): Promise<void> {
   const c = await pool.connect();
   try {
+    /* eslint-disable no-await-in-loop */ // client cannot multitask
+
     await c.query(withIdentifiers(STATEMENTS.CREATE_TABLE, {
       T: tableName,
     }));
+
+    const indices = await c.query({
+      rowMode: 'array',
+      text: STATEMENTS.GET_INDEX_NAMES,
+      values: [tableName],
+    });
+    const oldIndexNames = new Set(
+      indices.rows
+        .map((r) => r[0])
+        .filter((i) => (i.startsWith(`${tableName}_i`) || i.startsWith(`${tableName}_u`))),
+    );
 
     // PostgreSQL does not support prepared statements for CREATE statements,
     // so we must escape the values manually using quoteValue.
     const keyEntries = Object.entries(keys);
     for (let i = 0; i < keyEntries.length; i += 1) {
-      /* eslint-disable no-await-in-loop */ // client cannot multitask
       const [k, v] = keyEntries[i];
       if (v && v.unique) {
-        await c.query(withIdentifiers(STATEMENTS.DROP_INDEX, {
-          T: tableName,
-          I: `${tableName}_i${k}`,
-        }));
-        await c.query(withIdentifiers(STATEMENTS.CREATE_UNIQUE_INDEX, {
-          T: tableName,
-          I: `${tableName}_u${k}`,
-        }).replace(/\$1/g, quoteValue(k)));
+        const name = `${tableName}_u${k}`;
+        if (!oldIndexNames.delete(name)) {
+          await c.query(withIdentifiers(STATEMENTS.CREATE_UNIQUE_INDEX, {
+            T: tableName,
+            I: name,
+          }).replace(/\$1/g, quoteValue(k)));
+        }
       } else {
-        await c.query(withIdentifiers(STATEMENTS.DROP_INDEX, {
-          T: tableName,
-          I: `${tableName}_u${k}`,
-        }));
-        await c.query(withIdentifiers(STATEMENTS.CREATE_INDEX, {
-          T: tableName,
-          I: `${tableName}_i${k}`,
-        }).replace(/\$1/g, quoteValue(k)));
+        const name = `${tableName}_i${k}`;
+        if (!oldIndexNames.delete(name)) {
+          await c.query(withIdentifiers(STATEMENTS.CREATE_INDEX, {
+            T: tableName,
+            I: name,
+          }).replace(/\$1/g, quoteValue(k)));
+        }
       }
-      /* eslint-enable no-await-in-loop */
     }
+    const indicesToDelete = [...oldIndexNames];
+    for (let i = 0; i < indicesToDelete.length; i += 1) {
+      const idx = indicesToDelete[i];
+      await c.query(withIdentifiers(STATEMENTS.DROP_INDEX, {
+        T: tableName,
+        I: idx,
+      }));
+    }
+
+    /* eslint-enable no-await-in-loop */
   } finally {
     c.release();
   }
