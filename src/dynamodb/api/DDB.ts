@@ -1,4 +1,5 @@
 import type AWS from './AWS';
+import { Results, Paged } from './Results';
 import retry from '../../helpers/retry';
 
 // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/Welcome.html
@@ -56,6 +57,17 @@ interface DDBBatchGetResponse extends DDBResponse {
   }>;
 }
 
+interface DDBBatchWriteResponse extends DDBResponse {
+  UnprocessedItems: Record<string, {
+    DeleteRequest?: {
+      Key: DDBItem;
+    };
+    PutRequest?: {
+      Item: DDBItem;
+    };
+  }[]>;
+}
+
 interface DDBListTablesResponse extends DDBResponse {
   TableNames: string[];
   LastEvaluatedTableName?: string;
@@ -64,6 +76,38 @@ interface DDBListTablesResponse extends DDBResponse {
 interface DDBScanResponse extends DDBResponse {
   Items: DDBItem[];
   LastEvaluatedKey?: DDBItem;
+}
+
+interface DDBGlobalSecondaryIndex {
+  Backfilling?: boolean;
+  IndexName: string;
+  IndexStatus?: string;
+  KeySchema: {
+    AttributeName: string;
+    KeyType: DDBKeyType;
+  }[];
+  Projection?: {
+    NonKeyAttributes?: string[];
+    ProjectionType: string;
+  };
+}
+
+interface DDBAttributeDefinition {
+  AttributeName: string;
+  AttributeType: string;
+}
+
+interface DDBDescribeResponse extends DDBResponse {
+  Table: {
+    AttributeDefinitions: DDBAttributeDefinition[];
+    GlobalSecondaryIndexes?: DDBGlobalSecondaryIndex[];
+    ItemCount: number;
+    KeySchema: {
+      AttributeName: string;
+      KeyType: DDBKeyType;
+    }[];
+    TableStatus: string;
+  };
 }
 
 export interface KeyDefinition {
@@ -170,26 +214,58 @@ export function escapeName(name: string): string {
   }).padEnd(3, '_');
 }
 
-async function getAllPaged<K, I>(
-  fn: (start: K | undefined) => Promise<[I[], K]>,
-  pageLimit = Number.POSITIVE_INFINITY,
-): Promise<I[]> {
-  const items: I[] = [];
-  let lastKey: K | undefined;
-  for (let page = 0; page < pageLimit; page += 1) {
-    /* eslint-disable-next-line no-await-in-loop */ // pagination must be serial
-    const [pageItems, nextKey]: [I[], K] = await fn(lastKey);
-    items.push(...pageItems);
-    lastKey = nextKey;
-    if (!lastKey) {
-      return items;
-    }
-  }
-  throw new Error('Too many items');
-}
-
 interface DDBOptions {
   consistentRead?: boolean;
+}
+
+function createAttributeDefinitions(
+  schemas: KeyDefinition[][],
+): DDBAttributeDefinition[] {
+  const attrs = new Map<string, DDBType>();
+  schemas.forEach((keys) => keys.forEach(({ attributeName, attributeType }) => {
+    if (!attrs.has(attributeName)) {
+      attrs.set(attributeName, attributeType);
+    } else if (attrs.get(attributeName) !== attributeType) {
+      throw new Error(`inconsistent attribute type for ${attributeName}`);
+    }
+  }));
+  return [...attrs.entries()].map(([attributeName, attributeType]) => ({
+    AttributeName: attributeName,
+    AttributeType: attributeType,
+  }));
+}
+
+function createSecondaryIndex(
+  i: GlobalSecondaryIndexDefinition,
+): DDBGlobalSecondaryIndex {
+  return {
+    IndexName: i.indexName,
+    KeySchema: i.keySchema.map(({ attributeName, keyType }) => ({
+      AttributeName: attributeName,
+      KeyType: keyType,
+    })),
+    Projection: {
+      ProjectionType: i.projectionType || (i.nonKeyAttributes ? 'INCLUDE' : 'KEYS_ONLY'),
+      NonKeyAttributes: i.nonKeyAttributes,
+    },
+    // ProvisionedThroughput: {
+    //   ReadCapacityUnits: 1, // TODO: make configurable - only applies if PROVISIONED
+    //   WriteCapacityUnits: 1,
+    // },
+  };
+}
+
+function indicesMatch(
+  a: GlobalSecondaryIndexDefinition,
+  b: DDBGlobalSecondaryIndex,
+): boolean {
+  if (a.keySchema.length !== b.KeySchema.length) {
+    return false;
+  }
+  return a.keySchema.every((k, i) => (
+    k.attributeName === b.KeySchema[i].AttributeName &&
+    k.keyType === b.KeySchema[i].KeyType
+  ));
 }
 
 export class DDB {
@@ -219,93 +295,134 @@ export class DDB {
     return this.totalCapacityUnits;
   }
 
-  getTableNames(): Promise<string[]> {
+  getTableNames(): Results<string> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ListTables.html
-    return this.aws.do(() => getAllPaged(async (lastTableName) => {
+    return new Paged(this.aws, async (lastTableName) => {
       const response: DDBListTablesResponse = await this.call('ListTables', {
         ExclusiveStartTableName: lastTableName,
       });
       return [response.TableNames, response.LastEvaluatedTableName];
-    }, 10));
+    }, 10);
   }
 
-  // TODO:
-  // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DescribeTable.html for checking if table already exists, or indices need changing
-  // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTable.html for changing indices
   createTable(
     tableName: string,
     pKeySchema: KeyDefinition[],
     secondaryIndices: GlobalSecondaryIndexDefinition[] = [],
     waitForReady: boolean,
-  ): Promise<void> {
+  ): Promise<boolean> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_CreateTable.html
-    const attrs = new Map<string, DDBType>();
-    const allKeySchemas = [pKeySchema, ...secondaryIndices.map(({ keySchema }) => keySchema)];
-    allKeySchemas.forEach((keys) => keys.forEach(({ attributeName, attributeType }) => {
-      if (!attrs.has(attributeName)) {
-        attrs.set(attributeName, attributeType);
-      } else if (attrs.get(attributeName) !== attributeType) {
-        throw new Error(`inconsistent attribute type for ${attributeName}`);
-      }
-    }));
-
     return this.aws.do(async () => {
+      let created = false;
       try {
         await this.call('CreateTable', {
           TableName: tableName,
-          AttributeDefinitions: [...attrs.entries()].map(([attributeName, attributeType]) => ({
-            AttributeName: attributeName,
-            AttributeType: attributeType,
-          })),
+          AttributeDefinitions: createAttributeDefinitions([
+            pKeySchema,
+            ...secondaryIndices.map(({ keySchema }) => keySchema),
+          ]),
           KeySchema: pKeySchema.map(({ attributeName, keyType }) => ({
             AttributeName: attributeName,
             KeyType: keyType,
           })),
-          GlobalSecondaryIndexes: ifNotEmpty(secondaryIndices.map((i) => ({
-            IndexName: i.indexName,
-            KeySchema: i.keySchema.map(({ attributeName, keyType }) => ({
-              AttributeName: attributeName,
-              KeyType: keyType,
-            })),
-            Projection: {
-              ProjectionType: i.projectionType || (i.nonKeyAttributes ? 'INCLUDE' : 'KEYS_ONLY'),
-              NonKeyAttributes: i.nonKeyAttributes,
-            },
-            // ProvisionedThroughput: {
-            //   ReadCapacityUnits: 1, // TODO: make configurable - only applies if PROVISIONED
-            //   WriteCapacityUnits: 1,
-            // },
-          }))),
+          GlobalSecondaryIndexes: ifNotEmpty(secondaryIndices.map(createSecondaryIndex)),
           BillingMode: 'PAY_PER_REQUEST', // TODO: make configurable (PROVISIONED)
           // ProvisionedThroughput: {
           //   ReadCapacityUnits: 1, // TODO: make configurable - only applies if PROVISIONED
           //   WriteCapacityUnits: 1,
           // },
         });
+        created = true;
       } catch (e) {
         if (e.message.includes('ResourceInUseException')) {
-          // ignore (table already exists) - TODO: update indices if needed
+          await this.replaceIndices(tableName, secondaryIndices);
         } else {
           throw e;
         }
       }
 
       if (waitForReady) {
-        await this.waitForTable(tableName);
+        await this.waitForTable(tableName, true);
       }
+
+      return created;
     });
   }
 
-  async waitForTable(tableName: string): Promise<void> {
+  async replaceIndices(
+    tableName: string,
+    secondaryIndices: GlobalSecondaryIndexDefinition[] = [],
+  ): Promise<void> {
+    // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTable.html
+    const existing = await this.describeTable(tableName);
+    const indices = new Map<string, DDBGlobalSecondaryIndex>();
+    const toCreate: GlobalSecondaryIndexDefinition[] = [];
+    const oldIndices = existing.Table.GlobalSecondaryIndexes || [];
+    for (let i = 0; i < oldIndices.length; i += 1) {
+      const idx = oldIndices[i];
+      indices.set(idx.IndexName, idx);
+    }
+    for (let i = 0; i < secondaryIndices.length; i += 1) {
+      const idx = secondaryIndices[i];
+      const old = indices.get(idx.indexName);
+      if (old) {
+        if (!indicesMatch(idx, old)) {
+          throw new Error(`Cannot change existing index definition ${idx.indexName}`);
+        }
+        indices.delete(idx.indexName);
+      } else {
+        toCreate.push(idx);
+      }
+    }
+    const toDelete = [...indices.keys()];
+    /* eslint-disable no-await-in-loop */ // index creation and deletion must be serial
+    for (let i = 0; i < toDelete.length; i += 1) {
+      await this.call('UpdateTable', {
+        TableName: tableName,
+        GlobalSecondaryIndexUpdates: [{
+          Delete: { IndexName: toDelete[i] },
+        }],
+      });
+      // must wait for table to be ACTIVE before next update can be applied
+      await this.waitForTable(tableName, false);
+    }
+    for (let i = 0; i < toCreate.length; i += 1) {
+      await this.call('UpdateTable', {
+        TableName: tableName,
+        AttributeDefinitions: createAttributeDefinitions([toCreate[i].keySchema]),
+        GlobalSecondaryIndexUpdates: [{
+          Create: createSecondaryIndex(toCreate[i]),
+        }],
+      });
+      // must wait for table to be ACTIVE before next update can be applied
+      await this.waitForTable(tableName, false);
+    }
+    /* eslint-enable no-await-in-loop */
+  }
+
+  describeTable(tableName: string): Promise<DDBDescribeResponse> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DescribeTable.html
-    await this.aws.do(() => retry(
-      (e) => e.message.includes('ResourceNotFoundException'),
+    return this.call('DescribeTable', { TableName: tableName });
+  }
+
+  waitForTable(tableName: string, waitForIndices: boolean): Promise<void> {
+    return this.aws.do(() => retry(
+      (e) => (e.message.includes('ResourceNotFoundException') || e.message === 'pending'),
       {
         timeoutMillis: 60000,
         maxDelayMillis: 1000,
         jitter: false,
       },
-    )(() => this.call('DescribeTable', { TableName: tableName })));
+    )(async () => {
+      const desc = await this.describeTable(tableName);
+      if (desc.Table.TableStatus !== 'ACTIVE') {
+        throw new Error('pending');
+      }
+      const indices = desc.Table.GlobalSecondaryIndexes;
+      if (waitForIndices && indices && indices.some((i) => (i.IndexStatus !== 'ACTIVE'))) {
+        throw new Error('pending');
+      }
+    }));
   }
 
   async deleteTable(tableName: string): Promise<void> {
@@ -402,7 +519,6 @@ export class DDB {
     const indices = new Map<string, number>();
     keys.forEach((key, i) => indices.set(flatten(key, keyAttrs), i));
 
-    const batchSize = 100;
     const extracted: (DDBItem | null)[] = keys.map(() => null);
     const tableQuery = {
       ...escapedExpressions({
@@ -414,14 +530,13 @@ export class DDB {
       }),
       ConsistentRead: this.consistentRead,
     };
-    for (let batchPos = 0; batchPos < keys.length; batchPos += batchSize) {
-      const currentKeys = keys.slice(batchPos, batchPos + batchSize);
-      /* eslint-disable-next-line no-await-in-loop */ // pagination must be serial
+
+    await this.callBatched(keys, 100, async (batchKeys) => {
       const data: DDBBatchGetResponse = await this.call('BatchGetItem', {
         RequestItems: {
           [tableName]: {
             ...tableQuery,
-            Keys: currentKeys,
+            Keys: batchKeys,
           },
         },
         ReturnConsumedCapacity: 'TOTAL',
@@ -432,13 +547,39 @@ export class DDB {
           extracted[index] = item;
         }
       });
-      // TODO: handle UnprocessedKeys
-    }
+      return data.UnprocessedKeys[tableName]?.Keys || [];
+    });
 
     return extracted;
   }
 
-  getAllItems(tableName: string, requestedAttrs?: readonly string[]): Promise<DDBItem[]> {
+  batchPutItems(tableName: string, items: DDBItem[]): Promise<void> {
+    // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html
+    return this.callBatched(items, 25, async (batchItems) => {
+      const data: DDBBatchWriteResponse = await this.call('BatchWriteItem', {
+        RequestItems: {
+          [tableName]: batchItems.map((item) => ({ PutRequest: { Item: item } })),
+        },
+        ReturnConsumedCapacity: 'TOTAL',
+      });
+      return (data.UnprocessedItems[tableName] || []).map((i) => i.PutRequest!.Item);
+    });
+  }
+
+  batchDeleteItems(tableName: string, keys: DDBItem[]): Promise<void> {
+    // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html
+    return this.callBatched(keys, 25, async (batchKeys) => {
+      const data: DDBBatchWriteResponse = await this.call('BatchWriteItem', {
+        RequestItems: {
+          [tableName]: batchKeys.map((key) => ({ DeleteRequest: { Key: key } })),
+        },
+        ReturnConsumedCapacity: 'TOTAL',
+      });
+      return (data.UnprocessedItems[tableName] || []).map((i) => i.DeleteRequest!.Key);
+    });
+  }
+
+  getAllItems(tableName: string, requestedAttrs?: readonly string[]): Results<DDBItem> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html
     const query = {
       TableName: tableName,
@@ -452,13 +593,13 @@ export class DDB {
       ConsistentRead: this.consistentRead,
       ReturnConsumedCapacity: 'TOTAL',
     };
-    return this.aws.do(() => getAllPaged(async (lastKey) => {
+    return new Paged(this.aws, async (lastKey) => {
       const response: DDBScanResponse = await this.call('Scan', {
         ...query,
         ExclusiveStartKey: lastKey,
       });
       return [response.Items, response.LastEvaluatedKey];
-    }));
+    });
   }
 
   async getItemsBySecondaryKey(
@@ -506,13 +647,13 @@ export class DDB {
       });
       items = response.Items;
     } else {
-      items = await this.aws.do(() => getAllPaged(async (lastKey) => {
+      items = await new Paged(this.aws, async (lastKey) => {
         const response: DDBScanResponse = await this.call('Query', {
           ...query,
           ExclusiveStartKey: lastKey,
         });
         return [response.Items, response.LastEvaluatedKey];
-      }));
+      }).all();
     }
 
     if (!items.length || (requestedAttrs && !nonColocatedAttrs.length)) {
@@ -595,6 +736,24 @@ export class DDB {
       }),
       ReturnConsumedCapacity: 'TOTAL',
     }));
+  }
+
+  private callBatched<T>(
+    items: T[],
+    batchLimit: number,
+    fn: (batchItems: T[]) => Promise<T[]>,
+  ): Promise<void> {
+    return this.aws.do(async () => {
+      const queue = [...items];
+      for (let batchPos = 0; batchPos < queue.length;) {
+        const batchItems = queue.slice(batchPos, batchPos + batchLimit);
+        batchPos += batchItems.length;
+
+        /* eslint-disable-next-line no-await-in-loop */ // no benefit from parallelism
+        const retryItems = await fn(batchItems);
+        queue.push(...retryItems); // TODO: add delays for retrying items
+      }
+    });
   }
 
   private async call<T extends DDBResponse = DDBResponse>(

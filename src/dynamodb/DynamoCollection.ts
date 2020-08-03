@@ -30,6 +30,10 @@ function isDynamoBinary(value: DDBValue): value is { B: string } {
   return Object.hasOwnProperty.call(value, 'B');
 }
 
+function isDynamoStringSet(value: DDBValue): value is { SS: string[] } {
+  return Object.hasOwnProperty.call(value, 'SS');
+}
+
 function fromDynamoValue(value: DDBValue): unknown {
   if (isDynamoBinary(value)) {
     return deserialiseValueBin(Buffer.from(value.B, 'base64'));
@@ -57,18 +61,18 @@ function toDynamoKey(attr: string, value: DDBValue): DDBValue {
   };
 }
 
+const INDEX_META_KEY = { B: Buffer.from(':').toString('base64') };
+
 const indexTable = (tableName: string): string => `${tableName}.`;
 
 async function configureTable(
   ddb: DDB,
   tableName: string,
   nonuniqueKeys: string[],
-  hasUniqueKeys: boolean,
+  uniqueKeys: string[],
 ): Promise<void> {
-  // TODO: check if table already exists and adjust configuration if needed
-  // (should add tests for changing table definitions to add/remove/change indices)
-
-  await Promise.all([
+  const indexTableName = indexTable(tableName);
+  const [created] = await Promise.all<boolean, unknown>([
     ddb.createTable(
       tableName,
       [{ attributeName: 'id', attributeType: 'B', keyType: 'HASH' }],
@@ -78,13 +82,43 @@ async function configureTable(
       })),
       true,
     ),
-    hasUniqueKeys ? ddb.createTable(
-      indexTable(tableName),
+    uniqueKeys.length ? ddb.createTable(
+      indexTableName,
       [{ attributeName: 'ix', attributeType: 'B', keyType: 'HASH' }],
       [],
       true,
-    ) : null,
+    ) : ddb.deleteTable(indexTableName).catch(() => {}),
   ]);
+
+  if (created || !uniqueKeys.length) {
+    return;
+  }
+
+  // table already existed; might need to migrate old data for unique indices
+  const info = await ddb.getItem(indexTableName, { ix: INDEX_META_KEY }, ['meta']);
+  const newKeys = new Set(uniqueKeys);
+  const oldKeys: string[] = [];
+  if (info && isDynamoStringSet(info.meta)) {
+    oldKeys.push(...info.meta.SS.filter((item) => !newKeys.delete(item)));
+  }
+  if (newKeys.size) {
+    // we have new keys which must be populated
+    const attrs = [...newKeys];
+    await ddb.getAllItems(tableName, ['id', ...attrs]).batched(async (items) => {
+      const indexItems: DDBItem[] = [];
+      items.forEach((item) => attrs.forEach((attr) => {
+        indexItems.push({ ix: toDynamoKey(attr, item[attr]), id: item.id });
+      }));
+      return ddb.batchPutItems(indexTableName, indexItems);
+    });
+  } else if (!oldKeys.length) {
+    return; // no change
+  }
+  // do not delete old items; storing them is relatively
+  // cheap compared to scanning and deleting them
+
+  // update stored info about indices
+  await ddb.putItem(indexTableName, { ix: INDEX_META_KEY, meta: { SS: uniqueKeys } });
 }
 
 export default class DynamoCollection<T extends IDable> extends BaseCollection<T> {
@@ -106,7 +140,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       }
     });
 
-    this.initAsync(configureTable(ddb, tableName, nonuniqueKeys, this.uniqueKeys.length > 0));
+    this.initAsync(configureTable(ddb, tableName, nonuniqueKeys, this.uniqueKeys));
   }
 
   protected async internalAdd(value: T): Promise<void> {
@@ -122,16 +156,16 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     const item = toDynamoItem({ id, ...update });
     const { id: itemId, ...itemNoKey } = item;
     const key = { id: itemId };
+    /* eslint-disable no-await-in-loop */ // intentionally serial
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      /* eslint-disable-next-line no-await-in-loop */ // intentionally serial
       if (await this.updateItem(key, itemNoKey, key)) {
         return;
       }
-      /* eslint-disable-next-line no-await-in-loop */ // intentionally serial
       if (await this.putItem(item)) {
         return;
       }
     }
+    /* eslint-enable no-await-in-loop */
     throw new Error('Failed to upsert item');
   }
 
@@ -209,7 +243,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
     if (!searchAttribute) {
-      const items = await this.ddb.getAllItems(this.tableName, returnAttributes);
+      const items = await this.ddb.getAllItems(this.tableName, returnAttributes).all();
       return items.map(fromDynamoItem) as Pick<T, F[-1]>[];
     }
     if (this.isIndexUnique(searchAttribute)) {
@@ -299,7 +333,6 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     return true;
   }
 
-  // TODO: maybe add multi-delete which uses batching?
   private async deleteItem(key: DDBItem): Promise<boolean> {
     if (!this.uniqueKeys.length) {
       return this.ddb.deleteItem(this.tableName, key);
@@ -308,11 +341,10 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     if (!item) {
       return false;
     }
-    // TODO: use https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html
-    await Promise.all(this.uniqueKeys.map((attr) => this.ddb.deleteItem(
+    await this.ddb.batchDeleteItems(
       indexTable(this.tableName),
-      { ix: toDynamoKey(attr, item[attr]) },
-    )));
+      this.uniqueKeys.map((attr) => ({ ix: toDynamoKey(attr, item[attr]) })),
+    );
     return true;
   }
 }

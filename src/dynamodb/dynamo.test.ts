@@ -11,7 +11,7 @@ const prefix = url.pathname.substr(1);
 async function deleteTestTables(): Promise<void> {
   const db = DynamoDb.connect(url.href);
   const ddb = db.getDDB();
-  const allTables = await ddb.getTableNames();
+  const allTables = await ddb.getTableNames().all();
   await Promise.all(allTables
     .filter((name) => name.startsWith(prefix))
     .map((name) => ddb.deleteTable(name)));
