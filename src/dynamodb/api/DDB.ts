@@ -78,6 +78,11 @@ interface DDBScanResponse extends DDBResponse {
   LastEvaluatedKey?: DDBItem;
 }
 
+interface DDBProvisionedThroughput {
+  ReadCapacityUnits: number;
+  WriteCapacityUnits: number;
+}
+
 interface DDBGlobalSecondaryIndex {
   Backfilling?: boolean;
   IndexName: string;
@@ -90,6 +95,7 @@ interface DDBGlobalSecondaryIndex {
     NonKeyAttributes?: string[];
     ProjectionType: string;
   };
+  ProvisionedThroughput?: DDBProvisionedThroughput;
 }
 
 interface DDBAttributeDefinition {
@@ -237,6 +243,7 @@ function createAttributeDefinitions(
 
 function createSecondaryIndex(
   i: GlobalSecondaryIndexDefinition,
+  throughput: DDBProvisionedThroughput | undefined,
 ): DDBGlobalSecondaryIndex {
   return {
     IndexName: i.indexName,
@@ -248,10 +255,7 @@ function createSecondaryIndex(
       ProjectionType: i.projectionType || (i.nonKeyAttributes ? 'INCLUDE' : 'KEYS_ONLY'),
       NonKeyAttributes: i.nonKeyAttributes,
     },
-    // ProvisionedThroughput: {
-    //   ReadCapacityUnits: 1, // TODO: make configurable - only applies if PROVISIONED
-    //   WriteCapacityUnits: 1,
-    // },
+    ProvisionedThroughput: throughput,
   };
 }
 
@@ -310,6 +314,8 @@ export class DDB {
     pKeySchema: KeyDefinition[],
     secondaryIndices: GlobalSecondaryIndexDefinition[] = [],
     waitForReady: boolean,
+    throughput?: DDBProvisionedThroughput,
+    indexThroughput?: DDBProvisionedThroughput,
   ): Promise<boolean> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_CreateTable.html
     return this.aws.do(async () => {
@@ -325,17 +331,16 @@ export class DDB {
             AttributeName: attributeName,
             KeyType: keyType,
           })),
-          GlobalSecondaryIndexes: ifNotEmpty(secondaryIndices.map(createSecondaryIndex)),
-          BillingMode: 'PAY_PER_REQUEST', // TODO: make configurable (PROVISIONED)
-          // ProvisionedThroughput: {
-          //   ReadCapacityUnits: 1, // TODO: make configurable - only applies if PROVISIONED
-          //   WriteCapacityUnits: 1,
-          // },
+          GlobalSecondaryIndexes: ifNotEmpty(secondaryIndices.map(
+            (i) => createSecondaryIndex(i, indexThroughput || throughput),
+          )),
+          BillingMode: throughput ? 'PROVISIONED' : 'PAY_PER_REQUEST',
+          ProvisionedThroughput: throughput,
         });
         created = true;
       } catch (e) {
         if (e.message.includes('ResourceInUseException')) {
-          await this.replaceIndices(tableName, secondaryIndices);
+          await this.replaceIndices(tableName, secondaryIndices, indexThroughput || throughput);
         } else {
           throw e;
         }
@@ -347,57 +352,6 @@ export class DDB {
 
       return created;
     });
-  }
-
-  async replaceIndices(
-    tableName: string,
-    secondaryIndices: GlobalSecondaryIndexDefinition[] = [],
-  ): Promise<void> {
-    // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTable.html
-    const existing = await this.describeTable(tableName);
-    const indices = new Map<string, DDBGlobalSecondaryIndex>();
-    const toCreate: GlobalSecondaryIndexDefinition[] = [];
-    const oldIndices = existing.Table.GlobalSecondaryIndexes || [];
-    for (let i = 0; i < oldIndices.length; i += 1) {
-      const idx = oldIndices[i];
-      indices.set(idx.IndexName, idx);
-    }
-    for (let i = 0; i < secondaryIndices.length; i += 1) {
-      const idx = secondaryIndices[i];
-      const old = indices.get(idx.indexName);
-      if (old) {
-        if (!indicesMatch(idx, old)) {
-          throw new Error(`Cannot change existing index definition ${idx.indexName}`);
-        }
-        indices.delete(idx.indexName);
-      } else {
-        toCreate.push(idx);
-      }
-    }
-    const toDelete = [...indices.keys()];
-    /* eslint-disable no-await-in-loop */ // index creation and deletion must be serial
-    for (let i = 0; i < toDelete.length; i += 1) {
-      await this.call('UpdateTable', {
-        TableName: tableName,
-        GlobalSecondaryIndexUpdates: [{
-          Delete: { IndexName: toDelete[i] },
-        }],
-      });
-      // must wait for table to be ACTIVE before next update can be applied
-      await this.waitForTable(tableName, false);
-    }
-    for (let i = 0; i < toCreate.length; i += 1) {
-      await this.call('UpdateTable', {
-        TableName: tableName,
-        AttributeDefinitions: createAttributeDefinitions([toCreate[i].keySchema]),
-        GlobalSecondaryIndexUpdates: [{
-          Create: createSecondaryIndex(toCreate[i]),
-        }],
-      });
-      // must wait for table to be ACTIVE before next update can be applied
-      await this.waitForTable(tableName, false);
-    }
-    /* eslint-enable no-await-in-loop */
   }
 
   describeTable(tableName: string): Promise<DDBDescribeResponse> {
@@ -738,6 +692,58 @@ export class DDB {
     }));
   }
 
+  private async replaceIndices(
+    tableName: string,
+    secondaryIndices: GlobalSecondaryIndexDefinition[] = [],
+    throughput: DDBProvisionedThroughput | undefined,
+  ): Promise<void> {
+    // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTable.html
+    const existing = await this.describeTable(tableName);
+    const indices = new Map<string, DDBGlobalSecondaryIndex>();
+    const toCreate: GlobalSecondaryIndexDefinition[] = [];
+    const oldIndices = existing.Table.GlobalSecondaryIndexes || [];
+    for (let i = 0; i < oldIndices.length; i += 1) {
+      const idx = oldIndices[i];
+      indices.set(idx.IndexName, idx);
+    }
+    for (let i = 0; i < secondaryIndices.length; i += 1) {
+      const idx = secondaryIndices[i];
+      const old = indices.get(idx.indexName);
+      if (old) {
+        if (!indicesMatch(idx, old)) {
+          throw new Error(`Cannot change existing index definition ${idx.indexName}`);
+        }
+        indices.delete(idx.indexName);
+      } else {
+        toCreate.push(idx);
+      }
+    }
+    const toDelete = [...indices.keys()];
+    /* eslint-disable no-await-in-loop */ // index creation and deletion must be serial
+    for (let i = 0; i < toDelete.length; i += 1) {
+      await this.call('UpdateTable', {
+        TableName: tableName,
+        GlobalSecondaryIndexUpdates: [{
+          Delete: { IndexName: toDelete[i] },
+        }],
+      });
+      // must wait for table to be ACTIVE before next update can be applied
+      await this.waitForTable(tableName, false);
+    }
+    for (let i = 0; i < toCreate.length; i += 1) {
+      await this.call('UpdateTable', {
+        TableName: tableName,
+        AttributeDefinitions: createAttributeDefinitions([toCreate[i].keySchema]),
+        GlobalSecondaryIndexUpdates: [{
+          Create: createSecondaryIndex(toCreate[i], throughput),
+        }],
+      });
+      // must wait for table to be ACTIVE before next update can be applied
+      await this.waitForTable(tableName, false);
+    }
+    /* eslint-enable no-await-in-loop */
+  }
+
   private callBatched<T>(
     items: T[],
     batchLimit: number,
@@ -774,9 +780,9 @@ export class DDB {
     if (response.ConsumedCapacity) {
       let capacity;
       if (Array.isArray(response.ConsumedCapacity)) {
-        capacity = response.ConsumedCapacity.reduce((t, c) => (t + c.CapacityUnits), 0);
+        capacity = response.ConsumedCapacity.reduce((t, c) => (t + Number(c.CapacityUnits)), 0);
       } else {
-        capacity = response.ConsumedCapacity.CapacityUnits;
+        capacity = Number(response.ConsumedCapacity.CapacityUnits);
       }
       this.totalCapacityUnits += capacity;
     }

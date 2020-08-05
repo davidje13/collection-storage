@@ -70,6 +70,9 @@ async function configureTable(
   tableName: string,
   nonuniqueKeys: string[],
   uniqueKeys: string[],
+  throughput: any, // TODO
+  indexThroughput: any, // TODO
+  uniqueIndexThroughput: any, // TODO (auto-calculate as indexThroughput * uniqueKeys.length ?)
 ): Promise<void> {
   const indexTableName = indexTable(tableName);
   const [created] = await Promise.all<boolean, unknown>([
@@ -81,12 +84,15 @@ async function configureTable(
         keySchema: [{ attributeName: attr, attributeType: 'B', keyType: 'HASH' }],
       })),
       true,
+      throughput,
+      indexThroughput,
     ),
     uniqueKeys.length ? ddb.createTable(
       indexTableName,
       [{ attributeName: 'ix', attributeType: 'B', keyType: 'HASH' }],
       [],
       true,
+      uniqueIndexThroughput,
     ) : ddb.deleteTable(indexTableName).catch(() => {}),
   ]);
 
@@ -95,11 +101,11 @@ async function configureTable(
   }
 
   // table already existed; might need to migrate old data for unique indices
-  const info = await ddb.getItem(indexTableName, { ix: INDEX_META_KEY }, ['meta']);
+  const info = await ddb.getItem(indexTableName, { ix: INDEX_META_KEY }, ['unique']);
   const newKeys = new Set(uniqueKeys);
   const oldKeys: string[] = [];
-  if (info && isDynamoStringSet(info.meta)) {
-    oldKeys.push(...info.meta.SS.filter((item) => !newKeys.delete(item)));
+  if (info && isDynamoStringSet(info.unique)) {
+    oldKeys.push(...info.unique.SS.filter((item) => !newKeys.delete(item)));
   }
   if (newKeys.size) {
     // we have new keys which must be populated
@@ -118,7 +124,7 @@ async function configureTable(
   // cheap compared to scanning and deleting them
 
   // update stored info about indices
-  await ddb.putItem(indexTableName, { ix: INDEX_META_KEY, meta: { SS: uniqueKeys } });
+  await ddb.putItem(indexTableName, { ix: INDEX_META_KEY, unique: { SS: uniqueKeys } });
 }
 
 export default class DynamoCollection<T extends IDable> extends BaseCollection<T> {
@@ -140,7 +146,15 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       }
     });
 
-    this.initAsync(configureTable(ddb, tableName, nonuniqueKeys, this.uniqueKeys));
+    this.initAsync(configureTable(
+      ddb,
+      tableName,
+      nonuniqueKeys,
+      this.uniqueKeys,
+      undefined, // TODO: allow configuring throughput
+      undefined,
+      undefined,
+    ));
   }
 
   protected async internalAdd(value: T): Promise<void> {
@@ -326,10 +340,10 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     if (!success) {
       return false;
     }
-    await Promise.all(changedAttrs.map((attr) => this.ddb.deleteItem(
+    await this.ddb.batchDeleteItems(
       indexTable(this.tableName),
-      { ix: toDynamoKey(attr, old[attr]) },
-    )));
+      changedAttrs.map((attr) => ({ ix: toDynamoKey(attr, old[attr]) })),
+    );
     return true;
   }
 

@@ -1,5 +1,6 @@
 import type { DB } from './interfaces/DB';
 import type { Collection } from './interfaces/Collection';
+import { TestWrapper, wrapJest } from './test-helpers/wrapJest';
 
 interface TestType {
   id: string;
@@ -36,7 +37,7 @@ function getUniqueName(): string {
 interface ConfigT<T extends DB> {
   beforeAll?: () => Promise<void> | void;
   factory: () => Promise<T> | T;
-  afterEach?: (db: T) => Promise<void> | void;
+  testWrapper?: TestWrapper<() => T>;
   afterAll?: () => Promise<void> | void;
   testMigration?: boolean;
 }
@@ -60,7 +61,7 @@ function makeFailedDB<T extends DB>(e: unknown): T {
 export default <T extends DB>({
   beforeAll: beforeAllFn = nop,
   factory,
-  afterEach: afterEachFn = nop,
+  testWrapper,
   afterAll: afterAllFn = nop,
   testMigration = true,
 }: ConfigT<T>): void => {
@@ -80,9 +81,11 @@ export default <T extends DB>({
   });
 
   afterEach(async () => {
-    await afterEachFn(db);
     await db.close();
   });
+
+  // https://github.com/facebook/jest/issues/7774
+  const { it, describe } = wrapJest(testWrapper, () => db);
 
   it('stores and retrieves data', async () => {
     col = db.getCollection('test-simple');
