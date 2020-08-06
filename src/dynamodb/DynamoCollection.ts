@@ -3,7 +3,6 @@ import {
   DDBItem,
   DDBValue,
   escapeName,
-  TransactWrite,
 } from './api/DDB';
 import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
@@ -289,24 +288,40 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     return successes.filter((success) => success).length;
   }
 
-  private async putItem(item: DDBItem): Promise<boolean> {
-    if (!this.uniqueKeys.length) {
-      return this.ddb.putItem(this.tableName, item, 'id');
+  private async atomicPutUniques(
+    id: DDBValue,
+    item: DDBItem,
+    uniqueKeys: (keyof T & string)[],
+    fn: () => Promise<boolean>,
+  ): Promise<boolean> {
+    if (!uniqueKeys.length) {
+      return fn();
     }
-    return this.ddb.transactWriteItems([
-      ...this.uniqueKeys.map((attr): TransactWrite => ({
-        type: 'put',
-        tableName: indexTable(this.tableName),
-        item: { ix: toDynamoKey(attr, item[attr]), id: item.id },
-        unique: 'ix',
-      })),
-      {
-        type: 'put',
-        tableName: this.tableName,
-        item,
-        unique: 'id',
-      },
-    ]);
+    const indexTableName = indexTable(this.tableName);
+    const successes = await Promise.all(uniqueKeys.map((attr) => this.ddb.putItem(
+      indexTableName,
+      { ix: toDynamoKey(attr, item[attr]), id },
+      'ix',
+    )));
+    if (successes.every((x) => x)) {
+      if (await fn()) {
+        return true;
+      }
+    }
+    await Promise.all(uniqueKeys.map((attr, i) => (successes[i] ? this.ddb.deleteItem(
+      indexTableName,
+      { ix: toDynamoKey(attr, item[attr]) },
+    ) : null)));
+    return false;
+  }
+
+  private async putItem(item: DDBItem): Promise<boolean> {
+    return this.atomicPutUniques(
+      item.id,
+      item,
+      this.uniqueKeys,
+      () => this.ddb.putItem(this.tableName, item, 'id'),
+    );
   }
 
   private async updateItem(key: DDBItem, update: DDBItem, condition?: DDBItem): Promise<boolean> {
@@ -319,26 +334,15 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       return false;
     }
     const changedAttrs = updatedUnique.filter((a) => (old[a] as any).B !== (update[a] as any).B);
-    if (!changedAttrs.length) {
-      return this.ddb.updateItem(this.tableName, key, update, { ...old, ...condition });
-    }
-    const success = await this.ddb.transactWriteItems([
-      ...changedAttrs.map((attr): TransactWrite => ({
-        type: 'put',
-        tableName: indexTable(this.tableName),
-        item: { ix: toDynamoKey(attr, update[attr]), id: key.id },
-        unique: 'ix',
-      })),
-      {
-        type: 'update',
-        tableName: this.tableName,
-        key,
-        update,
-        condition: { ...old, ...condition },
-      },
-    ]);
+    const success = await this.atomicPutUniques(
+      key.id,
+      update,
+      changedAttrs,
+      () => this.ddb.updateItem(this.tableName, key, update, { ...old, ...condition }),
+    );
     if (!success) {
-      return false;
+      // distinguish duplicates from not-found by throwing instead of returning
+      throw new Error('duplicate');
     }
     await this.ddb.batchDeleteItems(
       indexTable(this.tableName),

@@ -21,19 +21,6 @@ export type DDBItem = Record<string, DDBValue>;
 type DDBType = 'S' | 'N' | 'B' | 'BOOL' | 'NULL' | 'M' | 'L' | 'SS' | 'NS' | 'BS';
 type DDBKeyType = 'HASH' | 'RANGE';
 
-export type TransactWrite = {
-  type: 'put';
-  tableName: string;
-  item: DDBItem;
-  unique?: string;
-} | {
-  type: 'update';
-  tableName: string;
-  key: DDBItem;
-  update: DDBItem;
-  condition?: DDBItem;
-};
-
 interface DDBConsumedCapacity {
   CapacityUnits: number;
 }
@@ -651,45 +638,6 @@ export class DDB {
       }
       throw e;
     }
-  }
-
-  transactWriteItems(spec: TransactWrite[]): Promise<boolean> {
-    return conditionalCheckStatus(() => this.call('TransactWriteItems', {
-      TransactItems: spec.map((s) => {
-        switch (s.type) {
-          case 'put':
-            return {
-              Put: {
-                TableName: s.tableName,
-                Item: s.item,
-                ConditionExpression: s.unique ? `attribute_not_exists(${s.unique})` : undefined,
-              },
-            };
-          case 'update':
-            return {
-              Update: {
-                TableName: s.tableName,
-                Key: s.key,
-                ...escapedExpressions({
-                  UpdateExpression: {
-                    attributeExpression: (attr, value): string => `${attr}=${value}`,
-                    joiner: (l): string => `SET ${l.join(',')}`,
-                    attributes: s.update,
-                  },
-                  ConditionExpression: {
-                    attributeExpression: (attr, value): string => `${attr}=${value}`,
-                    joiner: ' and ',
-                    attributes: s.condition,
-                  },
-                }),
-              },
-            };
-          default:
-            throw new Error('unknown transaction type');
-        }
-      }),
-      ReturnConsumedCapacity: 'TOTAL',
-    }));
   }
 
   private async replaceIndices(
