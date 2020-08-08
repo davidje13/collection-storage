@@ -218,19 +218,32 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
         returnAttributes,
       );
     } else if (this.isIndexUnique(searchAttribute)) {
+      const ddbSearchValue = toDynamoValue(searchValue);
       ddbItem = await this.ddb.getItem(
         indexTable(this.tableName),
-        { ix: toDynamoKey(searchAttribute, toDynamoValue(searchValue)) },
+        { ix: toDynamoKey(searchAttribute, ddbSearchValue) },
         ['id'],
       );
-      if (ddbItem) {
-        // TODO: only call this if extra cols are needed
-        // also can fill in search column from input if needed
-        ddbItem = await this.ddb.getItem(
-          this.tableName,
-          { id: ddbItem.id },
-          returnAttributes,
-        );
+      if (!ddbItem) {
+        return null;
+      }
+      const { id } = ddbItem;
+      if (!returnAttributes) {
+        ddbItem = await this.ddb.getItem(this.tableName, { id }, returnAttributes);
+      } else {
+        const filteredReturn = new Set(returnAttributes);
+        if (!filteredReturn.delete('id')) {
+          delete ddbItem.id;
+        }
+        if (filteredReturn.delete(searchAttribute)) {
+          ddbItem[searchAttribute] = ddbSearchValue;
+        }
+        if (filteredReturn.size) {
+          ddbItem = {
+            ...ddbItem,
+            ...await this.ddb.getItem(this.tableName, { id }, [...filteredReturn]),
+          };
+        }
       }
     } else {
       [ddbItem] = (await this.ddb.getItemsBySecondaryKey(

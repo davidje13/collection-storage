@@ -279,7 +279,34 @@ export default <T extends DB>({
       const v = await col.get('idx', 3);
       expect(v).toEqual(null);
     });
+  });
 
+  describe('get unique', () => {
+    beforeEach(async () => {
+      col = db.getCollection<TestType>(getUniqueName(), {
+        idx: { unique: true },
+      });
+
+      await col.add({ id: '1', idx: 2, a: 'A1', b: 'B1' });
+    });
+
+    it('returns only the requested attributes', async () => {
+      const v2 = await col.get('idx', 2, ['idx', 'b']);
+      expect(v2).toEqual({ idx: 2, b: 'B1' });
+    });
+
+    it('uses just the index if possible', async () => {
+      const v2 = await col.get('idx', 2, ['idx', 'id']);
+      expect(v2).toEqual({ idx: 2, id: '1' });
+    });
+
+    it('returns all attributes by default', async () => {
+      const v2 = await col.get('idx', 2);
+      expect(v2).toEqual({ id: '1', idx: 2, a: 'A1', b: 'B1' });
+    });
+  });
+
+  describe('get data types', () => {
     it('allows querying by JSON data', async () => {
       const value = { nested: ['hi', { object: 3 }] };
       const stored = { id: '1', value };

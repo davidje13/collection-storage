@@ -30,6 +30,10 @@ const KNOWN_CONSUMPTION: Record<string, number> = {
   'get > allows filters using any indexed attribute': 1.5,
   'get > returns null if no values match': 0,
 
+  'get unique > returns only the requested attributes': 2,
+  'get unique > uses just the index if possible': 1,
+  'get unique > returns all attributes by default': 2,
+
   'getAll > returns only the requested attributes': 1,
   'getAll > returns all attributes by default': 1,
   'getAll > allows filters using any indexed attribute': 2.5,
