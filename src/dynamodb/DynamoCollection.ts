@@ -4,10 +4,53 @@ import {
   DDBValue,
   escapeName,
 } from './api/DDB';
+import DDBError from './api/DDBError';
 import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
 import type { DBKeys } from '../interfaces/DB';
 import { serialiseValueBin, deserialiseValueBin } from '../helpers/serialiser';
+
+async function runAll<T>(
+  values: T[],
+  successesOut: T[],
+  fn: (value: T) => Promise<void>,
+): Promise<void> {
+  const results = await Promise.allSettled(values.map(async (value) => {
+    await fn(value);
+    successesOut.push(value);
+  }));
+  const failures = results.filter((s) => s.status === 'rejected') as PromiseRejectedResult[];
+  if (failures.length) {
+    throw failures[0];
+  }
+}
+
+export function isError(e: unknown, type: string): boolean {
+  return (
+    (e instanceof DDBError && e.isType(type)) ||
+    (e instanceof Error && e.message === type)
+  );
+}
+
+function wrapError(type: string, message: string): (e: unknown) => void {
+  return (e): void => {
+    throw isError(e, type) ? new Error(message) : e;
+  };
+}
+
+function handleError<T>(
+  type: string,
+  fn: () => Promise<T> | T,
+): (e: unknown) => Promise<T> | T {
+  return (e): (Promise<T> | T) => {
+    if (isError(e, type)) {
+      return fn();
+    }
+    throw e;
+  };
+}
+
+const ignore = (): void => {};
 
 function toDynamoValue(value: unknown): DDBValue {
   // all values must be binary, because keys must be defined
@@ -75,7 +118,7 @@ async function configureTable(
 ): Promise<void> {
   const indexTableName = indexTable(tableName);
   const [created] = await Promise.all<boolean, unknown>([
-    ddb.createTable(
+    ddb.upsertTable(
       tableName,
       [{ attributeName: 'id', attributeType: 'B', keyType: 'HASH' }],
       nonuniqueKeys.map((attr) => ({
@@ -86,13 +129,13 @@ async function configureTable(
       throughput,
       indexThroughput,
     ),
-    uniqueKeys.length ? ddb.createTable(
+    uniqueKeys.length ? ddb.upsertTable(
       indexTableName,
       [{ attributeName: 'ix', attributeType: 'B', keyType: 'HASH' }],
       [],
       true,
       uniqueIndexThroughput,
-    ) : ddb.deleteTable(indexTableName).catch(() => {}),
+    ) : ddb.deleteTable(indexTableName).catch(ignore),
   ]);
 
   if (created || !uniqueKeys.length) {
@@ -156,30 +199,36 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     ));
   }
 
-  protected async internalAdd(value: T): Promise<void> {
-    if (!await this.putItem(toDynamoItem(value as any))) {
-      throw new Error('duplicate');
-    }
+  protected internalAdd(value: T): Promise<void> {
+    return this.putItem(toDynamoItem(value as any));
   }
 
-  protected async internalUpsert(
+  protected internalUpsert(
     id: T['id'],
     update: Partial<T>,
   ): Promise<void> {
     const item = toDynamoItem({ id, ...update });
     const { id: itemId, ...itemNoKey } = item;
     const key = { id: itemId };
-    /* eslint-disable no-await-in-loop */ // intentionally serial
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      if (await this.updateItem(key, itemNoKey, key)) {
-        return;
-      }
-      if (await this.putItem(item)) {
-        return;
-      }
-    }
-    /* eslint-enable no-await-in-loop */
-    throw new Error('Failed to upsert item');
+
+    // optimistically try to update
+    return this.updateItem(key, itemNoKey, key).catch(handleError(
+      DDBError.ConditionalCheckFailedException,
+
+      // if that fails due to the item not existing, try creating it
+      () => this.putItem(item).catch(handleError(
+        'duplicate id',
+
+        // it that fails due to the item existing, the item was probably
+        // created in the gap between calls; update it
+        () => this.updateItem(key, itemNoKey, key).catch(wrapError(
+          DDBError.ConditionalCheckFailedException,
+
+          // if it fails again, give up
+          'Failed to upsert item',
+        )),
+      )),
+    ));
   }
 
   protected async internalUpdate<K extends keyof T & string>(
@@ -191,14 +240,14 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       await this.updateItem(
         toDynamoItem({ id: searchValue }),
         toDynamoItem(update),
-      );
+      ).catch(handleError(DDBError.ConditionalCheckFailedException, ignore));
     } else {
       const items = await this.internalGetAll(searchAttribute, searchValue, ['id']);
       await Promise.all(items.map(({ id }) => this.updateItem(
         toDynamoItem({ id }),
         toDynamoItem(update),
         toDynamoItem({ [searchAttribute]: searchValue }),
-      )));
+      ).catch(handleError(DDBError.ConditionalCheckFailedException, ignore))));
     }
   }
 
@@ -229,7 +278,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       }
       const { id } = ddbItem;
       if (!returnAttributes) {
-        ddbItem = await this.ddb.getItem(this.tableName, { id }, returnAttributes);
+        ddbItem = await this.ddb.getItem(this.tableName, { id });
       } else {
         const filteredReturn = new Set(returnAttributes);
         if (!filteredReturn.delete('id')) {
@@ -305,77 +354,85 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     id: DDBValue,
     item: DDBItem,
     uniqueKeys: (keyof T & string)[],
-    fn: () => Promise<boolean>,
-  ): Promise<boolean> {
+    fn: () => Promise<void>,
+  ): Promise<void> {
     if (!uniqueKeys.length) {
-      return fn();
+      await fn();
+      return;
     }
+
     const indexTableName = indexTable(this.tableName);
-    const successes = await Promise.all(uniqueKeys.map((attr) => this.ddb.putItem(
-      indexTableName,
-      { ix: toDynamoKey(attr, item[attr]), id },
-      'ix',
-    )));
-    if (successes.every((x) => x)) {
-      if (await fn()) {
-        return true;
-      }
+    const successes: string[] = [];
+    try {
+      await runAll(uniqueKeys, successes, (attr) => this.ddb.putItem(
+        indexTableName,
+        { ix: toDynamoKey(attr, item[attr]), id },
+        'ix',
+      ).catch(wrapError(DDBError.ConditionalCheckFailedException, `duplicate ${attr}`)));
+      await fn();
+    } catch (e) {
+      // best effort to reset state, but ignore errors here
+      await Promise.allSettled(successes.map((attr) => this.ddb.deleteItem(
+        indexTableName,
+        { ix: toDynamoKey(attr, item[attr]) },
+      )));
+      throw e;
     }
-    await Promise.all(uniqueKeys.map((attr, i) => (successes[i] ? this.ddb.deleteItem(
-      indexTableName,
-      { ix: toDynamoKey(attr, item[attr]) },
-    ) : null)));
-    return false;
   }
 
-  private async putItem(item: DDBItem): Promise<boolean> {
+  private async putItem(item: DDBItem): Promise<void> {
     return this.atomicPutUniques(
       item.id,
       item,
       this.uniqueKeys,
-      () => this.ddb.putItem(this.tableName, item, 'id'),
+      () => this.ddb.putItem(
+        this.tableName,
+        item,
+        'id',
+      ).catch(wrapError(DDBError.ConditionalCheckFailedException, 'duplicate id')),
     );
   }
 
-  private async updateItem(key: DDBItem, update: DDBItem, condition?: DDBItem): Promise<boolean> {
+  private async updateItem(key: DDBItem, update: DDBItem, condition?: DDBItem): Promise<void> {
     const updatedUnique = this.uniqueKeys.filter((a) => Object.hasOwnProperty.call(update, a));
     if (!updatedUnique.length) {
-      return this.ddb.updateItem(this.tableName, key, update, condition);
+      await this.ddb.updateItem(this.tableName, key, update, condition);
+      return;
     }
     const old = await this.ddb.getItem(this.tableName, key, updatedUnique);
     if (!old) {
-      return false;
+      throw new DDBError(400, DDBError.ConditionalCheckFailedException, 'could not find item to update');
     }
     const changedAttrs = updatedUnique.filter((a) => (old[a] as any).B !== (update[a] as any).B);
-    const success = await this.atomicPutUniques(
+    await this.atomicPutUniques(
       key.id,
       update,
       changedAttrs,
       () => this.ddb.updateItem(this.tableName, key, update, { ...old, ...condition }),
     );
-    if (!success) {
-      // distinguish duplicates from not-found by throwing instead of returning
-      throw new Error('duplicate');
-    }
     await this.ddb.batchDeleteItems(
       indexTable(this.tableName),
       changedAttrs.map((attr) => ({ ix: toDynamoKey(attr, old[attr]) })),
     );
-    return true;
   }
 
   private async deleteItem(key: DDBItem): Promise<boolean> {
-    if (!this.uniqueKeys.length) {
-      return this.ddb.deleteItem(this.tableName, key);
+    try {
+      if (!this.uniqueKeys.length) {
+        await this.ddb.deleteItem(this.tableName, key);
+      } else {
+        const item = await this.ddb.deleteAndReturnItem(this.tableName, key);
+        await this.ddb.batchDeleteItems(
+          indexTable(this.tableName),
+          this.uniqueKeys.map((attr) => ({ ix: toDynamoKey(attr, item[attr]) })),
+        );
+      }
+      return true;
+    } catch (e) {
+      if (isError(e, DDBError.ConditionalCheckFailedException)) {
+        return false;
+      }
+      throw e;
     }
-    const item = await this.ddb.deleteAndReturnItem(this.tableName, key);
-    if (!item) {
-      return false;
-    }
-    await this.ddb.batchDeleteItems(
-      indexTable(this.tableName),
-      this.uniqueKeys.map((attr) => ({ ix: toDynamoKey(attr, item[attr]) })),
-    );
-    return true;
   }
 }

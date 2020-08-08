@@ -37,12 +37,15 @@ interface RequestOptions {
 
 interface FetchResponse {
   status: number;
-  body: Buffer;
-  text: () => string;
-  json: () => unknown;
+  text: string;
 }
 
-export default class AWS {
+export interface AWSErrorResponse {
+  __type: string;
+  message: string;
+}
+
+export class AWS {
   private readonly baseKey: Buffer;
 
   private readonly keyCacheDate = new LruCache<string, Buffer>(1);
@@ -66,21 +69,7 @@ export default class AWS {
     return this.inflight.do(fn);
   }
 
-  async request<R = unknown>(options: RequestOptions): Promise<R> {
-    const response = await this.requestRaw(options);
-    if (response.status >= 300) {
-      try {
-        const info = response.json() as any;
-        // eslint-disable-next-line no-underscore-dangle
-        throw new Error(`AWS error ${response.status}; type: ${info.__type}; message: ${info.message}`);
-      } catch (e) {
-        throw new Error(`Unexpected status ${response.status} for call to '${options.url}'\n\nRequest: ${JSON.stringify(options.body)}\n\nResponse: ${response.text()}`);
-      }
-    }
-    return response.json() as R;
-  }
-
-  requestRaw({
+  request({
     method,
     url,
     region,
@@ -189,14 +178,9 @@ export default class AWS {
         const parts: Buffer[] = [];
         res.on('data', (chunk) => parts.push(chunk));
         res.on('end', () => {
-          const data = Buffer.concat(parts);
+          const text = Buffer.concat(parts).toString('utf8');
           parts.length = 0;
-          resolve({
-            status: res.statusCode || 0,
-            body: data,
-            text: () => data.toString('utf8'),
-            json: () => JSON.parse(data.toString('utf8')),
-          });
+          resolve({ status: res.statusCode || 0, text });
         });
       });
       req.on('error', reject);

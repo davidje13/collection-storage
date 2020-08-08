@@ -50,7 +50,7 @@ const KNOWN_CONSUMPTION: Record<string, number> = {
 
   'update > upsert > updates existing records if found by ID': 3,
   'update > upsert > adds a new record if no value matches using key ID': 5,
-  'update > upsert > rejects duplicates if no value matches': 3,
+  'update > upsert > rejects duplicates if no value matches': 2,
 
   'remove > removes items from the collection': 3,
   'remove > removes all items matching the query': 5.5,
@@ -72,16 +72,17 @@ describe('DynamoDb', () => {
     beforeAll: deleteTestTables,
     afterAll: deleteTestTables, // clean up after as well as before
     testWrapper: async (name, fn, getDB) => {
+      const fullname = name.join(' > ');
+      checkedConsumptions.add(fullname);
+
       const ddb = getDB().getDDB();
       const before = ddb.getConsumedUnits();
       await fn();
       const after = ddb.getConsumedUnits();
 
-      const fullname = name.join(' > ');
       const consumedUnits = after - before;
       const expectedUnits = KNOWN_CONSUMPTION[fullname];
       if (expectedUnits !== undefined) {
-        checkedConsumptions.add(fullname);
         expect(consumedUnits).toEqual(expectedUnits);
       }
     },

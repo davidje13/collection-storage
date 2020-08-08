@@ -1,5 +1,6 @@
-import type AWS from './AWS';
+import type { AWS, AWSErrorResponse } from './AWS';
 import { Results, Paged } from './Results';
+import DDBError from './DDBError';
 import retry from '../../helpers/retry';
 
 // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/Welcome.html
@@ -181,16 +182,6 @@ function escapedExpressions(
   };
 }
 
-function conditionalCheckStatus(fn: () => Promise<unknown>): Promise<boolean> {
-  return fn().then(() => true).catch((e) => {
-    // TODO: do this without searching for a string in the error message
-    if (e.message.includes('ConditionalCheckFailedException')) {
-      return false;
-    }
-    throw e;
-  });
-}
-
 const INVALID_NAME_CHARS = /[^-a-zA-Z0-9_.]/g;
 
 export function escapeName(name: string): string {
@@ -296,7 +287,7 @@ export class DDB {
     }, 10);
   }
 
-  createTable(
+  upsertTable(
     tableName: string,
     pKeySchema: KeyDefinition[],
     secondaryIndices: GlobalSecondaryIndexDefinition[] = [],
@@ -326,7 +317,7 @@ export class DDB {
         });
         created = true;
       } catch (e) {
-        if (e.message.includes('ResourceInUseException')) {
+        if (e instanceof DDBError && e.isType(DDBError.ResourceInUseException)) {
           await this.replaceIndices(tableName, secondaryIndices, indexThroughput || throughput);
         } else {
           throw e;
@@ -348,7 +339,10 @@ export class DDB {
 
   waitForTable(tableName: string, waitForIndices: boolean): Promise<void> {
     return this.aws.do(() => retry(
-      (e) => (e.message.includes('ResourceNotFoundException') || e.message === 'pending'),
+      (e) => (
+        (e instanceof DDBError && e.isType(DDBError.ResourceNotFoundException)) ||
+        e.message === 'pending'
+      ),
       {
         timeoutMillis: 60000,
         maxDelayMillis: 1000,
@@ -371,24 +365,30 @@ export class DDB {
     await this.call('DeleteTable', { TableName: tableName });
   }
 
-  putItem(tableName: string, item: DDBItem, unique?: string): Promise<boolean> {
+  async putItem(tableName: string, item: DDBItem, unique?: string): Promise<void> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html
-    return conditionalCheckStatus(() => this.call('PutItem', {
+    await this.call('PutItem', {
       TableName: tableName,
       Item: item,
-      ConditionExpression: unique ? `attribute_not_exists(${unique})` : undefined,
+      ...escapedExpressions({
+        ConditionExpression: {
+          attributeExpression: (attr): string => `attribute_not_exists(${attr})`,
+          joiner: ' and ',
+          attributes: unique ? [unique] : [],
+        },
+      }),
       ReturnConsumedCapacity: 'TOTAL',
-    }));
+    });
   }
 
-  updateItem(
+  async updateItem(
     tableName: string,
     key: DDBItem,
     update: DDBItem,
     condition?: DDBItem,
-  ): Promise<boolean> {
+  ): Promise<void> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html
-    return conditionalCheckStatus(() => this.call('UpdateItem', {
+    await this.call('UpdateItem', {
       TableName: tableName,
       Key: key,
       ...escapedExpressions({
@@ -404,7 +404,7 @@ export class DDB {
         },
       }),
       ReturnConsumedCapacity: 'TOTAL',
-    }));
+    });
   }
 
   async getItem(
@@ -611,33 +611,38 @@ export class DDB {
       .filter((item) => item) as DDBItem[];
   }
 
-  deleteItem(tableName: string, key: DDBItem): Promise<boolean> {
+  async deleteItem(tableName: string, key: DDBItem): Promise<void> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteItem.html
-    return conditionalCheckStatus(() => this.call('DeleteItem', {
+    await this.call('DeleteItem', {
       TableName: tableName,
       Key: key,
-      ConditionExpression: `attribute_exists(${Object.keys(key)[0]})`,
+      ...escapedExpressions({
+        ConditionExpression: {
+          attributeExpression: (attr): string => `attribute_exists(${attr})`,
+          joiner: ' and ',
+          attributes: [Object.keys(key)[0]],
+        },
+      }),
       ReturnConsumedCapacity: 'TOTAL',
-    }));
+    });
   }
 
-  async deleteAndReturnItem(tableName: string, key: DDBItem): Promise<DDBItem | null> {
+  async deleteAndReturnItem(tableName: string, key: DDBItem): Promise<DDBItem> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteItem.html
-    try {
-      const response: DDBReturnedItem = await this.call('DeleteItem', {
-        TableName: tableName,
-        Key: key,
-        ConditionExpression: `attribute_exists(${Object.keys(key)[0]})`,
-        ReturnConsumedCapacity: 'TOTAL',
-        ReturnValues: 'ALL_OLD',
-      });
-      return response.Attributes;
-    } catch (e) {
-      if (e.message.includes('ConditionalCheckFailedException')) {
-        return null;
-      }
-      throw e;
-    }
+    const response: DDBReturnedItem = await this.call('DeleteItem', {
+      TableName: tableName,
+      Key: key,
+      ...escapedExpressions({
+        ConditionExpression: {
+          attributeExpression: (attr): string => `attribute_exists(${attr})`,
+          joiner: ' and ',
+          attributes: [Object.keys(key)[0]],
+        },
+      }),
+      ReturnConsumedCapacity: 'TOTAL',
+      ReturnValues: 'ALL_OLD',
+    });
+    return response.Attributes;
   }
 
   private async replaceIndices(
@@ -714,7 +719,7 @@ export class DDB {
     fnName: string,
     body?: string | object | Buffer,
   ): Promise<T> {
-    const response = await this.aws.request<T>({
+    const response = await this.aws.request({
       method: 'POST',
       url: this.host,
       region: this.region,
@@ -725,15 +730,24 @@ export class DDB {
       },
       body,
     });
-    if (response.ConsumedCapacity) {
+    const data = JSON.parse(response.text) as T & AWSErrorResponse;
+    if (response.status >= 300) {
+      // DynamoDB does not include read/write capacity usage for errors, though
+      // they can consume capacity.
+      // https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.ConditionalWrites.ReturnConsumedCapacity
+
+      /* eslint-disable-next-line no-underscore-dangle */ // part of API
+      throw new DDBError(response.status, data.__type, data.message);
+    }
+    if (data.ConsumedCapacity) {
       let capacity;
-      if (Array.isArray(response.ConsumedCapacity)) {
-        capacity = response.ConsumedCapacity.reduce((t, c) => (t + Number(c.CapacityUnits)), 0);
+      if (Array.isArray(data.ConsumedCapacity)) {
+        capacity = data.ConsumedCapacity.reduce((t, c) => (t + Number(c.CapacityUnits)), 0);
       } else {
-        capacity = Number(response.ConsumedCapacity.CapacityUnits);
+        capacity = Number(data.ConsumedCapacity.CapacityUnits);
       }
       this.totalCapacityUnits += capacity;
     }
-    return response;
+    return data;
   }
 }
