@@ -4,11 +4,13 @@ import {
   DDBValue,
   escapeName,
 } from './api/DDB';
-import DDBError from './api/DDBError';
+import AWSError from './api/AWSError';
 import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
 import type { DBKeys } from '../interfaces/DB';
 import { serialiseValueBin, deserialiseValueBin } from '../helpers/serialiser';
+
+const ConditionalCheckFailedException = 'ConditionalCheckFailedException';
 
 async function runAll<T>(
   values: T[],
@@ -25,16 +27,9 @@ async function runAll<T>(
   }
 }
 
-export function isError(e: unknown, type: string): boolean {
-  return (
-    (e instanceof DDBError && e.isType(type)) ||
-    (e instanceof Error && e.message === type)
-  );
-}
-
 function wrapError(type: string, message: string): (e: unknown) => void {
   return (e): void => {
-    throw isError(e, type) ? new Error(message) : e;
+    throw AWSError.isType(e, type) ? new Error(message) : e;
   };
 }
 
@@ -43,7 +38,7 @@ function handleError<T>(
   fn: () => Promise<T> | T,
 ): (e: unknown) => Promise<T> | T {
   return (e): (Promise<T> | T) => {
-    if (isError(e, type)) {
+    if (AWSError.isType(e, type)) {
       return fn();
     }
     throw e;
@@ -213,7 +208,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
 
     // optimistically try to update
     return this.updateItem(key, itemNoKey, key).catch(handleError(
-      DDBError.ConditionalCheckFailedException,
+      ConditionalCheckFailedException,
 
       // if that fails due to the item not existing, try creating it
       () => this.putItem(item).catch(handleError(
@@ -222,7 +217,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
         // it that fails due to the item existing, the item was probably
         // created in the gap between calls; update it
         () => this.updateItem(key, itemNoKey, key).catch(wrapError(
-          DDBError.ConditionalCheckFailedException,
+          ConditionalCheckFailedException,
 
           // if it fails again, give up
           'Failed to upsert item',
@@ -240,14 +235,14 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       await this.updateItem(
         toDynamoItem({ id: searchValue }),
         toDynamoItem(update),
-      ).catch(handleError(DDBError.ConditionalCheckFailedException, ignore));
+      ).catch(handleError(ConditionalCheckFailedException, ignore));
     } else {
       const items = await this.internalGetAll(searchAttribute, searchValue, ['id']);
       await Promise.all(items.map(({ id }) => this.updateItem(
         toDynamoItem({ id }),
         toDynamoItem(update),
         toDynamoItem({ [searchAttribute]: searchValue }),
-      ).catch(handleError(DDBError.ConditionalCheckFailedException, ignore))));
+      ).catch(handleError(ConditionalCheckFailedException, ignore))));
     }
   }
 
@@ -368,7 +363,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
         indexTableName,
         { ix: toDynamoKey(attr, item[attr]), id },
         'ix',
-      ).catch(wrapError(DDBError.ConditionalCheckFailedException, `duplicate ${attr}`)));
+      ).catch(wrapError(ConditionalCheckFailedException, `duplicate ${attr}`)));
       await fn();
     } catch (e) {
       // best effort to reset state, but ignore errors here
@@ -389,7 +384,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
         this.tableName,
         item,
         'id',
-      ).catch(wrapError(DDBError.ConditionalCheckFailedException, 'duplicate id')),
+      ).catch(wrapError(ConditionalCheckFailedException, 'duplicate id')),
     );
   }
 
@@ -401,7 +396,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     }
     const old = await this.ddb.getItem(this.tableName, key, updatedUnique);
     if (!old) {
-      throw new DDBError(400, DDBError.ConditionalCheckFailedException, 'could not find item to update');
+      throw new AWSError(400, ConditionalCheckFailedException, 'could not find item to update');
     }
     const changedAttrs = updatedUnique.filter((a) => (old[a] as any).B !== (update[a] as any).B);
     await this.atomicPutUniques(
@@ -429,7 +424,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       }
       return true;
     } catch (e) {
-      if (isError(e, DDBError.ConditionalCheckFailedException)) {
+      if (AWSError.isType(e, ConditionalCheckFailedException)) {
         return false;
       }
       throw e;

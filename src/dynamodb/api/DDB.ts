@@ -1,7 +1,7 @@
-import type { AWS, AWSErrorResponse } from './AWS';
+import type AWS from './AWS';
 import { Results, Paged } from './Results';
-import DDBError from './DDBError';
 import retry from '../../helpers/retry';
+import AWSError from './AWSError';
 
 // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/Welcome.html
 
@@ -118,6 +118,8 @@ export interface GlobalSecondaryIndexDefinition {
 }
 
 const AWS_URL_FORMAT = /^([^:]*):\/\/dynamodb\.([^.]+)\.amazonaws\.com(\/?.*)$/;
+const ResourceInUseException = 'ResourceInUseException';
+const ResourceNotFoundException = 'ResourceNotFoundException';
 
 function ifNotEmpty<T extends any[] | string>(l: T): T | undefined {
   return l.length ? l : undefined;
@@ -317,7 +319,7 @@ export class DDB {
         });
         created = true;
       } catch (e) {
-        if (e instanceof DDBError && e.isType(DDBError.ResourceInUseException)) {
+        if (AWSError.isType(e, ResourceInUseException)) {
           await this.replaceIndices(tableName, secondaryIndices, indexThroughput || throughput);
         } else {
           throw e;
@@ -340,7 +342,7 @@ export class DDB {
   waitForTable(tableName: string, waitForIndices: boolean): Promise<void> {
     return this.aws.do(() => retry(
       (e) => (
-        (e instanceof DDBError && e.isType(DDBError.ResourceNotFoundException)) ||
+        AWSError.isType(e, ResourceNotFoundException) ||
         e.message === 'pending'
       ),
       {
@@ -730,15 +732,11 @@ export class DDB {
       },
       body,
     });
-    const data = JSON.parse(response.text) as T & AWSErrorResponse;
-    if (response.status >= 300) {
-      // DynamoDB does not include read/write capacity usage for errors, though
-      // they can consume capacity.
-      // https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.ConditionalWrites.ReturnConsumedCapacity
+    // DynamoDB does not include read/write capacity usage for errors, though
+    // they can consume capacity.
+    // https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.ConditionalWrites.ReturnConsumedCapacity
 
-      /* eslint-disable-next-line no-underscore-dangle */ // part of API
-      throw new DDBError(response.status, data.__type, data.message);
-    }
+    const data = response.json as T;
     if (data.ConsumedCapacity) {
       let capacity;
       if (Array.isArray(data.ConsumedCapacity)) {

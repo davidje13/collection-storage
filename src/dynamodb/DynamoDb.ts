@@ -1,5 +1,5 @@
 import DynamoCollection from './DynamoCollection';
-import { AWS } from './api/AWS';
+import AWS from './api/AWS';
 import { DDB, escapeName } from './api/DDB';
 import type { DBKeys } from '../interfaces/DB';
 import BaseDB from '../interfaces/BaseDB';

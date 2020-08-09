@@ -1,4 +1,4 @@
-import type { AWS } from './AWS';
+import type AWS from './AWS';
 
 export interface Results<I> {
   batched(consumer: (items: Readonly<I[]>) => (Promise<void> | void)): Promise<void> | void;

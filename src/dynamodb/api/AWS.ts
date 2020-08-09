@@ -1,6 +1,7 @@
 import { createHash, createHmac } from 'crypto';
 import https from 'https';
 import http from 'http';
+import AWSError from './AWSError';
 import PromiseTracker from '../../helpers/PromiseTracker';
 import LruCache from '../../helpers/LruCache';
 import retry from '../../helpers/retry';
@@ -11,7 +12,7 @@ const EMPTY_BUFFER = Buffer.alloc(0);
 const ISO_TIME_STRIP = /(-|:|\.[0-9]*)/g;
 const ALGORITHM = 'AWS4-HMAC-SHA256';
 
-const withErrorRetry = retry(() => true);
+const withTransientErrorRetry = retry((e) => (!(e instanceof AWSError) || e.isTransient()));
 
 function sha256(v: Buffer): string {
   const hash = createHash('sha256');
@@ -37,15 +38,15 @@ interface RequestOptions {
 
 interface FetchResponse {
   status: number;
-  text: string;
+  json: unknown;
 }
 
-export interface AWSErrorResponse {
+interface AWSErrorResponse {
   __type: string;
   message: string;
 }
 
-export class AWS {
+export default class AWS {
   private readonly baseKey: Buffer;
 
   private readonly keyCacheDate = new LruCache<string, Buffer>(1);
@@ -173,14 +174,24 @@ export class AWS {
     }
 
     const protocol = (url.protocol === 'https') ? https : http;
-    return this.inflight.do(() => withErrorRetry(() => new Promise((resolve, reject) => {
+    return this.inflight.do(() => withTransientErrorRetry(() => new Promise((resolve, reject) => {
       const req = protocol.request(url, options, (res) => {
         const parts: Buffer[] = [];
         res.on('data', (chunk) => parts.push(chunk));
         res.on('end', () => {
-          const text = Buffer.concat(parts).toString('utf8');
-          parts.length = 0;
-          resolve({ status: res.statusCode || 0, text });
+          try {
+            const text = Buffer.concat(parts).toString('utf8');
+            parts.length = 0;
+            const json = JSON.parse(text) as AWSErrorResponse;
+            if (!res.statusCode || res.statusCode >= 300) {
+              /* eslint-disable-next-line no-underscore-dangle */ // part of API
+              reject(new AWSError(res.statusCode || 0, json.__type, json.message));
+            } else {
+              resolve({ status: res.statusCode, json });
+            }
+          } catch (e) {
+            reject(e);
+          }
         });
       });
       req.on('error', reject);
