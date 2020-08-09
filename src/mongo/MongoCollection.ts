@@ -2,6 +2,7 @@ import {
   Collection as MCollection,
   Binary as MBinary,
   IndexSpecification,
+  MongoError,
 } from 'mongodb';
 import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
@@ -28,9 +29,15 @@ function fieldNameFromMongo(name: string): string {
   return decodeURIComponent(name);
 }
 
+const MONGO_ERROR_IDX = /^.*? index: ([^ ]+) dup key:.*$/;
+function getErrorIndex(e: MongoError): string {
+  return MONGO_ERROR_IDX.exec(e.message)?.[1] || '';
+}
+
 const withUpsertRetry = retry((e) => (
-  typeof e === 'object' &&
-  e.message.includes('E11000')
+  e instanceof MongoError &&
+  e.code === 11000 &&
+  getErrorIndex(e) === '_id_'
 ));
 
 function convertToMongo<T extends Partial<IDable>>(
