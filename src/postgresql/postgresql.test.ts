@@ -19,6 +19,9 @@ function quoteIdentifier(msg: string): string {
   return `"${msg.replace(ESCAPE_REG, '""')}"`;
 }
 
+// database can take a moment to warm up if cold
+jest.setTimeout(10000);
+
 describe('PostgresDb', () => contract({
   beforeAll: async (): Promise<void> => {
     const dbName = getDbName(url);
