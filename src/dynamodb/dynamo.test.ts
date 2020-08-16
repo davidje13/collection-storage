@@ -1,7 +1,7 @@
 import DynamoDb from './DynamoDb';
 import contract from '../db.contract-test';
 
-const url = new URL(process.env.PSQL_URL || 'dynamodb://key:secret@localhost:8000/collection-storage-tests-?tls=false&consistentRead=true');
+const url = new URL(process.env.DDB_URL || 'dynamodb://key:secret@localhost:8000/collection-storage-tests-?tls=false&consistentRead=true');
 if (url.pathname.length <= 1) {
   // test tables MUST have a prefix, or it will not be possible to clear them after testing
   url.pathname = '/collection-storage-tests-';
@@ -104,8 +104,8 @@ describe('DynamoDb', () => {
     const db2 = DynamoDb.connect(url.href);
 
     try {
-      const col1 = db1.getCollection(`${prefix}shared`);
-      const col2 = db2.getCollection(`${prefix}shared`);
+      const col1 = db1.getCollection('shared');
+      const col2 = db2.getCollection('shared');
 
       const stored = { id: '1', value: 'shared-value' };
       await col1.add(stored);
@@ -115,6 +115,54 @@ describe('DynamoDb', () => {
     } finally {
       await db1.close();
       await db2.close();
+    }
+  });
+
+  it('uses the given throughput function to determine provisioned throughput', async () => {
+    const throughputFn = jest.fn();
+    const db = DynamoDb.connect(url.href, throughputFn);
+
+    try {
+      const col = db.getCollection<any>('with-throughput-fn', {
+        nonunique1: {},
+        nonunique2: {},
+        unique1: { unique: true },
+        unique2: { unique: true },
+      });
+      await col.getAll();
+    } finally {
+      await db.close();
+    }
+
+    expect(throughputFn).toHaveBeenCalledWith('with-throughput-fn', null);
+    expect(throughputFn).toHaveBeenCalledWith('with-throughput-fn', 'nonunique1');
+    expect(throughputFn).toHaveBeenCalledWith('with-throughput-fn', 'nonunique2');
+    expect(throughputFn).toHaveBeenCalledWith('with-throughput-fn', 'unique1');
+    expect(throughputFn).toHaveBeenCalledWith('with-throughput-fn', 'unique2');
+  });
+
+  it('applies fixed provisioning if configured in the query string', async () => {
+    const db = DynamoDb.connect(`${url.href}&provision_provisioned=3.2`);
+
+    try {
+      const col = db.getCollection('provisioned');
+      await col.getAll();
+      const description = await db.getDDB().describeTable(col.internalTableName);
+      expect(description.Table.ProvisionedThroughput.ReadCapacityUnits).toEqual(3);
+      expect(description.Table.ProvisionedThroughput.WriteCapacityUnits).toEqual(2);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it('rejects invalid provision formats', async () => {
+    const db = DynamoDb.connect(`${url.href}&provision_bad-provisioned=1-1`);
+
+    try {
+      const col = db.getCollection('bad-provisioned');
+      await expect(col.getAll()).rejects.not.toBeNull();
+    } finally {
+      await db.close();
     }
   });
 });

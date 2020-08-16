@@ -109,16 +109,51 @@ const INDEX_META_KEY = { B: Buffer.from(':').toString('base64') };
 
 const indexTable = (tableName: string): string => `${tableName}.`;
 
+export interface Throughput {
+  read: number;
+  write: number;
+}
+
+type CollectionThroughputFn = (indexName: string | null) => Throughput | null | undefined;
+
+function toDDBThroughput(
+  throughput: Throughput | null | undefined,
+): DDBProvisionedThroughput | undefined {
+  if (!throughput) {
+    return undefined;
+  }
+  return {
+    ReadCapacityUnits: Math.max(1, Math.ceil(throughput.read)),
+    WriteCapacityUnits: Math.max(1, Math.ceil(throughput.write)),
+  };
+}
+
+function getCombinedThroughput(
+  keys: string[],
+  throughputFn?: CollectionThroughputFn,
+): Throughput | null {
+  const totalThroughput = { read: 0, write: 0 };
+  let hasThroughput = false;
+  keys.forEach((attr) => {
+    const cur = throughputFn?.(attr);
+    if (cur) {
+      hasThroughput = true;
+      totalThroughput.read += cur.read;
+      totalThroughput.write += cur.write;
+    }
+  });
+  return hasThroughput ? totalThroughput : null;
+}
+
 async function configureTable(
   ddb: DDB,
   tableName: string,
   nonuniqueKeys: string[],
   uniqueKeys: string[],
-  throughput?: DDBProvisionedThroughput,
-  indexThroughput?: DDBProvisionedThroughput,
-  uniqueIndexThroughput?: DDBProvisionedThroughput,
+  throughputFn?: CollectionThroughputFn,
 ): Promise<void> {
   const indexTableName = indexTable(tableName);
+
   const [created] = await Promise.all<boolean, unknown>([
     ddb.upsertTable(
       tableName,
@@ -126,17 +161,17 @@ async function configureTable(
       nonuniqueKeys.map((attr) => ({
         indexName: escapeName(attr),
         keySchema: [{ attributeName: attr, attributeType: 'B', keyType: 'HASH' }],
-        throughput: indexThroughput || throughput,
+        throughput: toDDBThroughput(throughputFn?.(attr)),
       })),
       true,
-      throughput,
+      toDDBThroughput(throughputFn?.(null)),
     ),
     uniqueKeys.length ? ddb.upsertTable(
       indexTableName,
       [{ attributeName: 'ix', attributeType: 'B', keyType: 'HASH' }],
       [],
       true,
-      uniqueIndexThroughput,
+      toDDBThroughput(getCombinedThroughput(uniqueKeys, throughputFn)),
     ) : ddb.deleteTable(indexTableName).catch(ignore),
   ]);
 
@@ -178,6 +213,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     private readonly ddb: DDB,
     private readonly tableName: string,
     keys: DBKeys<T> = {},
+    throughputFn?: CollectionThroughputFn,
   ) {
     super(keys);
 
@@ -195,10 +231,16 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       tableName,
       nonuniqueKeys,
       this.uniqueKeys,
-      undefined, // TODO: allow configuring throughput
-      undefined,
-      undefined, // TODO (auto-calculate as indexThroughput * uniqueKeys.length ?)
+      throughputFn,
     ));
+  }
+
+  get internalTableName(): string {
+    return this.tableName;
+  }
+
+  get internalIndexTableName(): string {
+    return indexTable(this.tableName);
   }
 
   protected internalAdd(value: T): Promise<void> {

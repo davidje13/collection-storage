@@ -101,6 +101,7 @@ interface DDBDescribeResponse extends DDBResponse {
       KeyType: DDBKeyType;
     }[];
     TableStatus: string;
+    ProvisionedThroughput: DDBProvisionedThroughput;
   };
 }
 
