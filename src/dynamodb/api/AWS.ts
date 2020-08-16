@@ -59,10 +59,7 @@ export default class AWS {
 
   private closed = false;
 
-  constructor(
-    private readonly keyID: string,
-    secret: string,
-  ) {
+  constructor(private readonly keyID: string, secret: string) {
     this.baseKey = Buffer.from(`AWS4${secret}`, 'utf8');
   }
 

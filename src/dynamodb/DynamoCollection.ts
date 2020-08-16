@@ -3,6 +3,7 @@ import {
   DDBItem,
   DDBValue,
   escapeName,
+  DDBProvisionedThroughput,
 } from './api/DDB';
 import AWSError from './api/AWSError';
 import type { IDable } from '../interfaces/IDable';
@@ -78,12 +79,18 @@ function fromDynamoValue(value: DDBValue): unknown {
   throw new Error('unexpected value type from DDB');
 }
 
-function fromDynamoItem(value: DDBItem): Record<string, unknown> {
+function fromDynamoItem<T = Record<string, unknown>>(value: DDBItem): T;
+function fromDynamoItem<T = Record<string, unknown>>(value: DDBItem | null | undefined): T | null;
+
+function fromDynamoItem<T = Record<string, unknown>>(value: DDBItem | null | undefined): T | null {
+  if (!value) {
+    return null;
+  }
   const result: Record<string, unknown> = {};
   Object.keys(value).forEach((key) => {
     result[key] = fromDynamoValue(value[key]);
   });
-  return result;
+  return result as T;
 }
 
 function toDynamoKey(attr: string, value: DDBValue): DDBValue {
@@ -107,9 +114,9 @@ async function configureTable(
   tableName: string,
   nonuniqueKeys: string[],
   uniqueKeys: string[],
-  throughput: any, // TODO
-  indexThroughput: any, // TODO
-  uniqueIndexThroughput: any, // TODO (auto-calculate as indexThroughput * uniqueKeys.length ?)
+  throughput?: DDBProvisionedThroughput,
+  indexThroughput?: DDBProvisionedThroughput,
+  uniqueIndexThroughput?: DDBProvisionedThroughput,
 ): Promise<void> {
   const indexTableName = indexTable(tableName);
   const [created] = await Promise.all<boolean, unknown>([
@@ -119,10 +126,10 @@ async function configureTable(
       nonuniqueKeys.map((attr) => ({
         indexName: escapeName(attr),
         keySchema: [{ attributeName: attr, attributeType: 'B', keyType: 'HASH' }],
+        throughput: indexThroughput || throughput,
       })),
       true,
       throughput,
-      indexThroughput,
     ),
     uniqueKeys.length ? ddb.upsertTable(
       indexTableName,
@@ -190,7 +197,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       this.uniqueKeys,
       undefined, // TODO: allow configuring throughput
       undefined,
-      undefined,
+      undefined, // TODO (auto-calculate as indexThroughput * uniqueKeys.length ?)
     ));
   }
 
@@ -254,54 +261,55 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     searchValue: T[K],
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
-    let ddbItem: DDBItem | null;
     if (searchAttribute === 'id') {
-      ddbItem = await this.ddb.getItem(
+      return fromDynamoItem<Pick<T, F[-1]>>(await this.ddb.getItem(
         this.tableName,
         toDynamoItem({ id: searchValue }),
         returnAttributes,
-      );
-    } else if (this.isIndexUnique(searchAttribute)) {
-      const ddbSearchValue = toDynamoValue(searchValue);
-      ddbItem = await this.ddb.getItem(
-        indexTable(this.tableName),
-        { ix: toDynamoKey(searchAttribute, ddbSearchValue) },
-        ['id'],
-      );
-      if (!ddbItem) {
-        return null;
-      }
-      const { id } = ddbItem;
-      if (!returnAttributes) {
-        ddbItem = await this.ddb.getItem(this.tableName, { id });
-      } else {
-        const filteredReturn = new Set(returnAttributes);
-        if (!filteredReturn.delete('id')) {
-          delete ddbItem.id;
-        }
-        if (filteredReturn.delete(searchAttribute)) {
-          ddbItem[searchAttribute] = ddbSearchValue;
-        }
-        if (filteredReturn.size) {
-          ddbItem = {
-            ...ddbItem,
-            ...await this.ddb.getItem(this.tableName, { id }, [...filteredReturn]),
-          };
-        }
-      }
-    } else {
-      [ddbItem] = (await this.ddb.getItemsBySecondaryKey(
+      ));
+    }
+
+    if (!this.isIndexUnique(searchAttribute)) {
+      const ddbItems = await this.ddb.getItemsBySecondaryKey(
         this.tableName,
         escapeName(searchAttribute),
         toDynamoItem({ [searchAttribute]: searchValue }),
         returnAttributes,
         true,
-      ));
+      );
+      return fromDynamoItem<Pick<T, F[-1]>>(ddbItems[0]);
     }
-    if (!ddbItem) {
+
+    const ddbSearchValue = toDynamoValue(searchValue);
+    const key = await this.ddb.getItem(
+      indexTable(this.tableName),
+      { ix: toDynamoKey(searchAttribute, ddbSearchValue) },
+      ['id'],
+    );
+    if (!key) {
       return null;
     }
-    return fromDynamoItem(ddbItem) as Pick<T, F[-1]>;
+    if (!returnAttributes) {
+      return fromDynamoItem<Pick<T, F[-1]>>(await this.ddb.getItem(this.tableName, key));
+    }
+    const ddbItem: DDBItem = {};
+    const filteredReturn = new Set(returnAttributes);
+    if (filteredReturn.delete('id')) {
+      Object.assign(ddbItem, key);
+    }
+    if (filteredReturn.delete(searchAttribute)) {
+      ddbItem[searchAttribute] = ddbSearchValue;
+    }
+    if (filteredReturn.size) {
+      const primaryItem = await this.ddb.getItem(this.tableName, key, [...filteredReturn]);
+      if (!primaryItem) {
+        // index and main table are out of sync;
+        // assume main table is correct and item does not exist
+        return null;
+      }
+      Object.assign(ddbItem, primaryItem);
+    }
+    return fromDynamoItem<Pick<T, F[-1]>>(ddbItem);
   }
 
   protected async internalGetAll<
@@ -366,11 +374,10 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       ).catch(wrapError(ConditionalCheckFailedException, `duplicate ${attr}`)));
       await fn();
     } catch (e) {
-      // best effort to reset state, but ignore errors here
-      await Promise.allSettled(successes.map((attr) => this.ddb.deleteItem(
+      await this.ddb.batchDeleteItems(
         indexTableName,
-        { ix: toDynamoKey(attr, item[attr]) },
-      )));
+        successes.map((attr) => ({ ix: toDynamoKey(attr, item[attr]) })),
+      ).catch(ignore); // best effort to reset state, but ignore errors here
       throw e;
     }
   }

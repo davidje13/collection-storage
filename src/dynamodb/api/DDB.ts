@@ -66,7 +66,7 @@ interface DDBScanResponse extends DDBResponse {
   LastEvaluatedKey?: DDBItem;
 }
 
-interface DDBProvisionedThroughput {
+export interface DDBProvisionedThroughput {
   ReadCapacityUnits: number;
   WriteCapacityUnits: number;
 }
@@ -104,17 +104,18 @@ interface DDBDescribeResponse extends DDBResponse {
   };
 }
 
-export interface KeyDefinition {
+interface KeyDefinition {
   attributeName: string;
   attributeType: DDBType;
   keyType: DDBKeyType;
 }
 
-export interface GlobalSecondaryIndexDefinition {
+interface GlobalSecondaryIndexDefinition {
   indexName: string;
   keySchema: KeyDefinition[];
   projectionType?: 'KEYS_ONLY' | 'INCLUDE' | 'ALL';
   nonKeyAttributes?: string[];
+  throughput?: DDBProvisionedThroughput;
 }
 
 const AWS_URL_FORMAT = /^([^:]*):\/\/dynamodb\.([^.]+)\.amazonaws\.com(\/?.*)$/;
@@ -126,13 +127,13 @@ function ifNotEmpty<T extends any[] | string>(l: T): T | undefined {
 }
 
 function flatten(value: DDBItem, keys: string[]): string {
-  return keys.map((key) => JSON.stringify(value[key])).join('');
+  return keys.map((key) => JSON.stringify(value[key])).join();
 }
 
 interface ExpressionDefinition {
   attributeExpression: (attr: string, value: string) => string;
   joiner: string | ((items: string[]) => string);
-  attributes: Readonly<DDBItem | string[] | undefined>;
+  attributes: Readonly<DDBItem | string[]>;
 }
 
 function escapedExpressions(
@@ -147,9 +148,6 @@ function escapedExpressions(
 
   Object.keys(expressions).forEach((key) => {
     const { attributeExpression, joiner, attributes } = expressions[key];
-    if (!attributes) {
-      return;
-    }
 
     const parts: string[] = [];
     const hasValues = !Array.isArray(attributes);
@@ -184,6 +182,12 @@ function escapedExpressions(
   };
 }
 
+const projection = (attrs: readonly string[] | undefined): ExpressionDefinition => ({
+  attributeExpression: (attr): string => attr,
+  joiner: ',',
+  attributes: attrs || [],
+});
+
 const INVALID_NAME_CHARS = /[^-a-zA-Z0-9_.]/g;
 
 export function escapeName(name: string): string {
@@ -204,9 +208,7 @@ interface DDBOptions {
   consistentRead?: boolean;
 }
 
-function createAttributeDefinitions(
-  schemas: KeyDefinition[][],
-): DDBAttributeDefinition[] {
+function createAttributeDefinitions(schemas: KeyDefinition[][]): DDBAttributeDefinition[] {
   const attrs = new Map<string, DDBType>();
   schemas.forEach((keys) => keys.forEach(({ attributeName, attributeType }) => {
     if (!attrs.has(attributeName)) {
@@ -221,10 +223,7 @@ function createAttributeDefinitions(
   }));
 }
 
-function createSecondaryIndex(
-  i: GlobalSecondaryIndexDefinition,
-  throughput: DDBProvisionedThroughput | undefined,
-): DDBGlobalSecondaryIndex {
+function createSecondaryIndex(i: GlobalSecondaryIndexDefinition): DDBGlobalSecondaryIndex {
   return {
     IndexName: i.indexName,
     KeySchema: i.keySchema.map(({ attributeName, keyType }) => ({
@@ -235,14 +234,11 @@ function createSecondaryIndex(
       ProjectionType: i.projectionType || (i.nonKeyAttributes ? 'INCLUDE' : 'KEYS_ONLY'),
       NonKeyAttributes: i.nonKeyAttributes,
     },
-    ProvisionedThroughput: throughput,
+    ProvisionedThroughput: i.throughput,
   };
 }
 
-function indicesMatch(
-  a: GlobalSecondaryIndexDefinition,
-  b: DDBGlobalSecondaryIndex,
-): boolean {
+function indicesMatch(a: GlobalSecondaryIndexDefinition, b: DDBGlobalSecondaryIndex): boolean {
   if (a.keySchema.length !== b.KeySchema.length) {
     return false;
   }
@@ -262,9 +258,7 @@ export class DDB {
   constructor(
     private readonly aws: AWS,
     private readonly host: string,
-    {
-      consistentRead = false,
-    }: DDBOptions = {},
+    { consistentRead = false }: DDBOptions = {},
   ) {
     const parts = AWS_URL_FORMAT.exec(host);
     if (parts) {
@@ -295,7 +289,6 @@ export class DDB {
     secondaryIndices: GlobalSecondaryIndexDefinition[] = [],
     waitForReady: boolean,
     throughput?: DDBProvisionedThroughput,
-    indexThroughput?: DDBProvisionedThroughput,
   ): Promise<boolean> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_CreateTable.html
     return this.aws.do(async () => {
@@ -312,7 +305,7 @@ export class DDB {
             KeyType: keyType,
           })),
           GlobalSecondaryIndexes: ifNotEmpty(secondaryIndices.map(
-            (i) => createSecondaryIndex(i, indexThroughput || throughput),
+            (i) => createSecondaryIndex(i),
           )),
           BillingMode: throughput ? 'PROVISIONED' : 'PAY_PER_REQUEST',
           ProvisionedThroughput: throughput,
@@ -320,7 +313,7 @@ export class DDB {
         created = true;
       } catch (e) {
         if (AWSError.isType(e, ResourceInUseException)) {
-          await this.replaceIndices(tableName, secondaryIndices, indexThroughput || throughput);
+          await this.replaceIndices(tableName, secondaryIndices);
         } else {
           throw e;
         }
@@ -340,16 +333,9 @@ export class DDB {
   }
 
   waitForTable(tableName: string, waitForIndices: boolean): Promise<void> {
-    return this.aws.do(() => retry(
-      (e) => (
-        AWSError.isType(e, ResourceNotFoundException) ||
-        e.message === 'pending'
-      ),
-      {
-        timeoutMillis: 60000,
-        maxDelayMillis: 1000,
-        jitter: false,
-      },
+    return retry(
+      (e) => (AWSError.isType(e, ResourceNotFoundException) || e.message === 'pending'),
+      { timeoutMillis: 60000, maxDelayMillis: 1000, jitter: false },
     )(async () => {
       const desc = await this.describeTable(tableName);
       if (desc.Table.TableStatus !== 'ACTIVE') {
@@ -359,7 +345,7 @@ export class DDB {
       if (waitForIndices && indices && indices.some((i) => (i.IndexStatus !== 'ACTIVE'))) {
         throw new Error('pending');
       }
-    }));
+    });
   }
 
   async deleteTable(tableName: string): Promise<void> {
@@ -402,7 +388,7 @@ export class DDB {
         ConditionExpression: {
           attributeExpression: (attr, value): string => `${attr}=${value}`,
           joiner: ' and ',
-          attributes: condition,
+          attributes: condition || {},
         },
       }),
       ReturnConsumedCapacity: 'TOTAL',
@@ -418,13 +404,7 @@ export class DDB {
     const data: DDBGetResponse = await this.call('GetItem', {
       TableName: tableName,
       Key: key,
-      ...escapedExpressions({
-        ProjectionExpression: {
-          attributeExpression: (attr): string => attr,
-          joiner: ',',
-          attributes: requestedAttrs,
-        },
-      }),
+      ...escapedExpressions({ ProjectionExpression: projection(requestedAttrs) }),
       ConsistentRead: this.consistentRead,
       ReturnConsumedCapacity: 'TOTAL',
     });
@@ -464,13 +444,7 @@ export class DDB {
 
     const extracted: (DDBItem | null)[] = keys.map(() => null);
     const tableQuery = {
-      ...escapedExpressions({
-        ProjectionExpression: {
-          attributeExpression: (attr): string => attr,
-          joiner: ',',
-          attributes: fullAttrs,
-        },
-      }),
+      ...escapedExpressions({ ProjectionExpression: projection(fullAttrs) }),
       ConsistentRead: this.consistentRead,
     };
 
@@ -526,13 +500,7 @@ export class DDB {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html
     const query = {
       TableName: tableName,
-      ...escapedExpressions({
-        ProjectionExpression: {
-          attributeExpression: (attr): string => attr,
-          joiner: ',',
-          attributes: requestedAttrs,
-        },
-      }),
+      ...escapedExpressions({ ProjectionExpression: projection(requestedAttrs) }),
       ConsistentRead: this.consistentRead,
       ReturnConsumedCapacity: 'TOTAL',
     };
@@ -573,11 +541,7 @@ export class DDB {
           joiner: ' and ',
           attributes: key,
         },
-        ProjectionExpression: {
-          attributeExpression: (attr): string => attr,
-          joiner: ',',
-          attributes: colocatedAttrs,
-        },
+        ProjectionExpression: projection(colocatedAttrs),
       }),
       ConsistentRead: false, // cannot be true for Global Secondary Index
       ReturnConsumedCapacity: 'TOTAL',
@@ -614,22 +578,14 @@ export class DDB {
   }
 
   async deleteItem(tableName: string, key: DDBItem): Promise<void> {
-    // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteItem.html
-    await this.call('DeleteItem', {
-      TableName: tableName,
-      Key: key,
-      ...escapedExpressions({
-        ConditionExpression: {
-          attributeExpression: (attr): string => `attribute_exists(${attr})`,
-          joiner: ' and ',
-          attributes: [Object.keys(key)[0]],
-        },
-      }),
-      ReturnConsumedCapacity: 'TOTAL',
-    });
+    await this.callDelete(tableName, key, false);
   }
 
-  async deleteAndReturnItem(tableName: string, key: DDBItem): Promise<DDBItem> {
+  deleteAndReturnItem(tableName: string, key: DDBItem): Promise<DDBItem> {
+    return this.callDelete(tableName, key, true);
+  }
+
+  private async callDelete(tableName: string, key: DDBItem, returnOld: boolean): Promise<DDBItem> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteItem.html
     const response: DDBReturnedItem = await this.call('DeleteItem', {
       TableName: tableName,
@@ -642,7 +598,7 @@ export class DDB {
         },
       }),
       ReturnConsumedCapacity: 'TOTAL',
-      ReturnValues: 'ALL_OLD',
+      ReturnValues: returnOld ? 'ALL_OLD' : undefined,
     });
     return response.Attributes;
   }
@@ -650,7 +606,6 @@ export class DDB {
   private async replaceIndices(
     tableName: string,
     secondaryIndices: GlobalSecondaryIndexDefinition[] = [],
-    throughput: DDBProvisionedThroughput | undefined,
   ): Promise<void> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTable.html
     const existing = await this.describeTable(tableName);
@@ -689,9 +644,7 @@ export class DDB {
       await this.call('UpdateTable', {
         TableName: tableName,
         AttributeDefinitions: createAttributeDefinitions([toCreate[i].keySchema]),
-        GlobalSecondaryIndexUpdates: [{
-          Create: createSecondaryIndex(toCreate[i], throughput),
-        }],
+        GlobalSecondaryIndexUpdates: [{ Create: createSecondaryIndex(toCreate[i]) }],
       });
       // must wait for table to be ACTIVE before next update can be applied
       await this.waitForTable(tableName, false);
