@@ -88,7 +88,9 @@ automatic migrations on a per-record basis).
 The MongoDB and PostgreSQL databases support changing indices in any
 way at a later point. In a later deploy, you can simply create your
 collection with different indices, and the necessary changes will
-happen automatically. Note that Redis does not currently support
+happen automatically. DynamoDB indices will also be updated
+automatically but note that this may take some time and will use up
+capacity on the indices. Note that Redis does not currently support
 changing or removing existing indices, and will not index existing
 data if a new index is added.
 
