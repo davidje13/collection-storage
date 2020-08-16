@@ -1,1 +1,1 @@
-{"version":3,"file":"CollectionStorage.d.ts","sourceRoot":"","sources":["../src/CollectionStorage.ts"],"names":[],"mappings":"AAIA,OAAO,KAAK,EAAE,EAAE,EAAE,MAAM,iBAAiB,CAAC;AAE1C,MAAM,CAAC,OAAO,OAAO,iBAAiB;WAChB,OAAO,CAAC,GAAG,EAAE,MAAM,GAAG,OAAO,CAAC,EAAE,CAAC;CAoBtD"}
+{"version":3,"file":"CollectionStorage.d.ts","sourceRoot":"","sources":["../src/CollectionStorage.ts"],"names":[],"mappings":"AAKA,OAAO,KAAK,EAAE,EAAE,EAAE,MAAM,iBAAiB,CAAC;AAE1C,MAAM,CAAC,OAAO,OAAO,iBAAiB;WAChB,OAAO,CAAC,GAAG,EAAE,MAAM,GAAG,OAAO,CAAC,EAAE,CAAC;CAsBtD"}

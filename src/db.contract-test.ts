@@ -1,5 +1,6 @@
 import type { DB } from './interfaces/DB';
 import type { Collection } from './interfaces/Collection';
+import { TestWrapper, wrapJest } from './test-helpers/wrapJest';
 
 interface TestType {
   id: string;
@@ -33,9 +34,10 @@ function getUniqueName(): string {
   return `test-${time.substr(time.length - 7)}${random}`;
 }
 
-interface ConfigT {
+interface ConfigT<T extends DB> {
   beforeAll?: () => Promise<void> | void;
-  factory: () => Promise<DB> | DB;
+  factory: () => Promise<T> | T;
+  testWrapper?: TestWrapper<() => T>;
   afterAll?: () => Promise<void> | void;
   testMigration?: boolean;
 }
@@ -56,13 +58,14 @@ function makeFailedDB<T extends DB>(e: unknown): T {
 }
 
 // eslint-disable-next-line jest/no-export
-export default ({
+export default <T extends DB>({
   beforeAll: beforeAllFn = nop,
   factory,
+  testWrapper,
   afterAll: afterAllFn = nop,
   testMigration = true,
-}: ConfigT): void => {
-  let db: DB;
+}: ConfigT<T>): void => {
+  let db: T;
   let col: Collection<TestType>;
 
   beforeAll(beforeAllFn);
@@ -80,6 +83,9 @@ export default ({
   afterEach(async () => {
     await db.close();
   });
+
+  // https://github.com/facebook/jest/issues/7774
+  const { it, describe } = wrapJest(testWrapper, () => db);
 
   it('stores and retrieves data', async () => {
     col = db.getCollection('test-simple');
@@ -273,7 +279,34 @@ export default ({
       const v = await col.get('idx', 3);
       expect(v).toEqual(null);
     });
+  });
 
+  describe('get unique', () => {
+    beforeEach(async () => {
+      col = db.getCollection<TestType>(getUniqueName(), {
+        idx: { unique: true },
+      });
+
+      await col.add({ id: '1', idx: 2, a: 'A1', b: 'B1' });
+    });
+
+    it('returns only the requested attributes', async () => {
+      const v2 = await col.get('idx', 2, ['idx', 'b']);
+      expect(v2).toEqual({ idx: 2, b: 'B1' });
+    });
+
+    it('uses just the index if possible', async () => {
+      const v2 = await col.get('idx', 2, ['idx', 'id']);
+      expect(v2).toEqual({ idx: 2, id: '1' });
+    });
+
+    it('returns all attributes by default', async () => {
+      const v2 = await col.get('idx', 2);
+      expect(v2).toEqual({ id: '1', idx: 2, a: 'A1', b: 'B1' });
+    });
+  });
+
+  describe('get data types', () => {
     it('allows querying by JSON data', async () => {
       const value = { nested: ['hi', { object: 3 }] };
       const stored = { id: '1', value };
@@ -466,6 +499,13 @@ export default ({
         expect(v!.b).toEqual('updated');
         const all = await col.getAll();
         expect(all.length).toEqual(3);
+      });
+
+      it('preserves unmodified values when updating', async () => {
+        await col.update('id', '2', { b: 'updated' }, { upsert: true });
+
+        const v = await col.get('id', '2');
+        expect(v!.a).toEqual('A2');
       });
 
       it('adds a new record if no value matches using key ID', async () => {
