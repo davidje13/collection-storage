@@ -1,7 +1,7 @@
 import type AWS from './AWS';
 import { Results, Paged } from './Results';
-import retry from '../../helpers/retry';
 import AWSError from './AWSError';
+import retry from '../../helpers/retry';
 
 // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/Welcome.html
 
@@ -188,6 +188,14 @@ const projection = (attrs: readonly string[] | undefined): ExpressionDefinition 
   attributes: attrs || [],
 });
 
+const retryPolling = retry(
+  (e) => (AWSError.isType(e, ResourceNotFoundException) || e.message === 'pending'),
+  { timeoutMillis: 60000, maxDelayMillis: 1000, jitter: false },
+);
+const retryRemaining = retry(
+  (e) => (e.message === 'remaining unprocessed items'),
+);
+
 const INVALID_NAME_CHARS = /[^-a-zA-Z0-9_.]/g;
 
 export function escapeName(name: string): string {
@@ -333,10 +341,7 @@ export class DDB {
   }
 
   waitForTable(tableName: string, waitForIndices: boolean): Promise<void> {
-    return retry(
-      (e) => (AWSError.isType(e, ResourceNotFoundException) || e.message === 'pending'),
-      { timeoutMillis: 60000, maxDelayMillis: 1000, jitter: false },
-    )(async () => {
+    return retryPolling(async () => {
       const desc = await this.describeTable(tableName);
       if (desc.Table.TableStatus !== 'ACTIVE') {
         throw new Error('pending');
@@ -657,17 +662,21 @@ export class DDB {
     batchLimit: number,
     fn: (batchItems: T[]) => Promise<T[]>,
   ): Promise<void> {
-    return this.aws.do(async () => {
-      const queue = [...items];
-      for (let batchPos = 0; batchPos < queue.length;) {
-        const batchItems = queue.slice(batchPos, batchPos + batchLimit);
-        batchPos += batchItems.length;
+    const remaining = items.slice();
+    return this.aws.do(() => retryRemaining(async () => {
+      const queue = remaining.slice();
+      remaining.length = 0;
+      while (queue.length) {
+        const batchItems = queue.splice(0, batchLimit);
 
         /* eslint-disable-next-line no-await-in-loop */ // no benefit from parallelism
         const retryItems = await fn(batchItems);
-        queue.push(...retryItems); // TODO: add delays for retrying items
+        remaining.push(...retryItems);
       }
-    });
+      if (remaining.length) {
+        throw new Error('remaining unprocessed items');
+      }
+    }));
   }
 
   private async call<T extends DDBResponse = DDBResponse>(
