@@ -6,7 +6,7 @@ interface RequestOptions {
     region: string;
     service: string;
     headers?: Record<string, string>;
-    body?: string | object | Buffer;
+    body?: string | Record<string, unknown> | Buffer;
     date?: Date;
 }
 interface FetchResponse {

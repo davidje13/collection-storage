@@ -31,7 +31,10 @@ export interface Wrapper<T extends IDable, K extends keyof T, FieldStorage, Cust
   ) => Promise<void> | void;
 }
 
-function hasAnyField(value: object, fields: readonly string[]): boolean {
+function hasAnyField(
+  value: Record<string, unknown>,
+  fields: readonly string[],
+): boolean {
   return fields
     .some((field) => Object.prototype.hasOwnProperty.call(value, field));
 }
@@ -118,17 +121,17 @@ export default class WrappedCollection<
 
   private async wrapAll(
     v: Readonly<T>,
-    extra?: object,
+    extra?: Record<string, unknown>,
   ): Promise<Inner>;
 
   private async wrapAll(
     v: Readonly<Partial<T>>,
-    extra?: object,
+    extra?: Record<string, unknown>,
   ): Promise<Partial<Inner>>;
 
   private async wrapAll(
     v: Readonly<Partial<T>>,
-    extra?: object,
+    extra?: Record<string, unknown>,
   ): Promise<Partial<Inner>> {
     let processed: E;
     if (this.wrapper.preWrap && hasAnyField(v, this.fields)) {
@@ -146,17 +149,17 @@ export default class WrappedCollection<
 
   private async unwrapAll(
     v: Readonly<Inner>,
-    extra?: object,
+    extra?: Record<string, unknown>,
   ): Promise<T>;
 
   private async unwrapAll<K extends keyof T>(
     v: Readonly<Pick<Inner, K>>,
-    extra?: object,
+    extra?: Record<string, unknown>,
   ): Promise<Pick<T, K>>;
 
   private async unwrapAll<K extends keyof T>(
     v: Readonly<Pick<Inner, K>>,
-    extra?: object,
+    extra?: Record<string, unknown>,
   ): Promise<Pick<T, K>> {
     let processed: E;
     if (this.wrapper.preUnwrap && hasAnyField(v, this.fields)) {

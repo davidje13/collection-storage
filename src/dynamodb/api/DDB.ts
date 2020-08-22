@@ -682,7 +682,7 @@ export class DDB {
 
   private async call<T extends DDBResponse = DDBResponse>(
     fnName: string,
-    body?: string | object | Buffer,
+    body?: string | Record<string, unknown> | Buffer,
   ): Promise<T> {
     const response = await this.aws.request({
       method: 'POST',

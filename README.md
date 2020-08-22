@@ -652,26 +652,11 @@ use a different database index.
 database to drop (if necessary) and re-create the specified test database.
 You do not need to create the test database yourself.
 
-On macOS: MongoDB, Redis and PostgreSQL can be installed with:
+The target databases can be started using Docker if not installed locally:
 
 ```bash
-brew install mongodb redis postgresql
-brew services start mongodb
-brew services start redis
-brew services start postgresql
-```
-
-On Ubuntu: they can be installed with:
-
-```bash
-apt install mongodb redis-server postgresql-11
-```
-
-Or portably using Docker:
-
-```bash
-docker run -d mongo:4
-docker run -d redis:5-alpine
-docker run -d postgres:11-alpine
+docker run -d -p 27017:27017 mongo:4
+docker run -d -p 6379:6379 redis:5-alpine
+docker run -d -p 5432:5432 postgres:11-alpine
 docker run -d -p 8000:8000 amazon/dynamodb-local:latest
 ```
