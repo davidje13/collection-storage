@@ -140,6 +140,16 @@ describe('encryption', () => {
       const value = await col.get('id', 1);
       expect([...value!.value]).toEqual([...record.value]);
     });
+
+    it('forbids encrypting unique attributes', async () => {
+      const record = { id: 1, value: '' };
+
+      const db = await CollectionStorage.connect('memory://');
+      const enc = encryptByKey(rootKey);
+      expect(() => {
+        enc<typeof record>()(['value'], db.getCollection('enc', { value: { unique: true } }));
+      }).toThrow('Cannot wrap unique index value');
+    });
   });
 
   describe('encryptByRecord', () => {

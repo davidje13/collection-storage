@@ -81,12 +81,12 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
   ) {
     super(keys);
 
-    Object.keys(keys).forEach((k) => {
+    this.indices.getCustomIndices().forEach((k) => {
       const key = k as keyof DBKeys<T>;
       const keyPrefix = `${prefix}-${key}`;
       this.keyPrefixes[key] = keyPrefix;
       const keyInfo = { key, prefix: keyPrefix };
-      if (keys[key]!.unique) {
+      if (this.indices.isUniqueIndex(key)) {
         this.uniqueKeys.push(keyInfo);
       } else {
         this.nonUniqueKeys.push(keyInfo);
@@ -183,8 +183,7 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
     searchValue: T[K],
   ): Promise<number> {
     const sKey = serialiseValue(searchValue);
-    const indexedKeys = Object.keys(this.keys);
-    indexedKeys.push('id');
+    const indexedKeys = this.indices.getIndices();
 
     return this.pool.retryWithConnection(async (client) => {
       const sIds = await this.getAndWatchBySerialisedKey(client, searchAttribute, sKey);
@@ -260,7 +259,7 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
     const oldSerialised = await this.rawByKeyKeepWatches(
       client,
       sId,
-      Object.keys(this.keys).filter((k) => patchSerialised[k]),
+      this.indices.getCustomIndices().filter((k) => patchSerialised[k]),
     );
     if (!oldSerialised) {
       return undefined;

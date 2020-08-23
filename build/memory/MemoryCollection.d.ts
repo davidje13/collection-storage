@@ -6,7 +6,7 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
     private readonly simulatedLatency;
     private readonly stateRef;
     private readonly data;
-    private readonly indices;
+    private readonly indexData;
     constructor(keys?: DBKeys<T>, simulatedLatency?: number, stateRef?: StateRef);
     protected preAct(): Promise<void> | void;
     protected internalAdd(value: T): Promise<void>;

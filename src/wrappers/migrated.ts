@@ -1,4 +1,4 @@
-import type { Collection, UpdateOptions } from '../interfaces/Collection';
+import type { Collection, UpdateOptions, Indices } from '../interfaces/Collection';
 import type { IDable } from '../interfaces/IDable';
 
 type MigrationFuncs<T, ExtraFetchFields extends readonly (keyof T & string)[]> = {
@@ -68,6 +68,10 @@ class MigratedCollection<
     searchValue: T[K],
   ): Promise<number> {
     return this.baseCollection.remove(searchAttribute, searchValue);
+  }
+
+  public get indices(): Indices {
+    return this.baseCollection.indices;
   }
 
   private extendAttributes<

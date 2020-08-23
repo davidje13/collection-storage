@@ -311,7 +311,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       ));
     }
 
-    if (!this.isIndexUnique(searchAttribute)) {
+    if (!this.indices.isUniqueIndex(searchAttribute)) {
       const ddbItems = await this.ddb.getItemsBySecondaryKey(
         this.tableName,
         escapeName(searchAttribute),
@@ -366,7 +366,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       const items = await this.ddb.getAllItems(this.tableName, returnAttributes).all();
       return items.map(fromDynamoItem) as Pick<T, F[-1]>[];
     }
-    if (this.isIndexUnique(searchAttribute)) {
+    if (this.indices.isUniqueIndex(searchAttribute)) {
       const item = await this.internalGet(searchAttribute, searchValue!, returnAttributes);
       return item ? [item] : [];
     }

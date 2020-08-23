@@ -8,7 +8,21 @@ export interface UpdateOptions {
   upsert?: boolean;
 }
 
+export interface Indices {
+  getIndices(): string[];
+
+  getUniqueIndices(): string[];
+
+  getCustomIndices(): string[];
+
+  isIndex(attribute: string): boolean;
+
+  isUniqueIndex(attribute: string): boolean;
+}
+
 export interface Collection<T extends IDable> {
+  readonly indices: Readonly<Indices>;
+
   add(entry: T): Promise<void>;
 
   get<K extends keyof T & string>(

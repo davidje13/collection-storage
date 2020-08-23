@@ -1,17 +1,19 @@
-import type { Collection, UpdateOptions } from './Collection';
+import type { Collection, UpdateOptions, Indices } from './Collection';
 import type { IDable } from './IDable';
 import type { DBKeys } from './DB';
+import BaseIndices from './BaseIndices';
 
 export default abstract class BaseCollection<T extends IDable> implements Collection<T> {
+  public readonly indices: Readonly<Indices>;
+
   // actually read publicly by BaseDB but we don't want this to be a user-accessible property
   protected internalReady?: () => Promise<void>;
 
   private innerPreAct: () => Promise<void> | void;
 
-  protected constructor(
-    protected readonly keys: DBKeys<T>,
-  ) {
+  protected constructor(keys: DBKeys<T>) {
     this.innerPreAct = this.preAct.bind(this);
+    this.indices = new BaseIndices(keys);
   }
 
   public async add(entry: T): Promise<void> {
@@ -27,7 +29,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     searchValue: T[K],
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
-    if (!this.isIndexed(searchAttribute)) {
+    if (!this.indices.isIndex(searchAttribute)) {
       throw new Error(`No index for ${searchAttribute}`);
     }
     await this.innerPreAct();
@@ -42,7 +44,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     searchValue?: T[K],
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
-    if (searchAttribute && !this.isIndexed(searchAttribute)) {
+    if (searchAttribute && !this.indices.isIndex(searchAttribute)) {
       throw new Error(`No index for ${searchAttribute}`);
     }
     await this.innerPreAct();
@@ -70,12 +72,12 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
       await this.innerPreAct();
       return this.internalUpsert(searchValue as T['id'], withoutId, options);
     }
-    if (!this.isIndexed(searchAttribute)) {
+    if (!this.indices.isIndex(searchAttribute)) {
       throw new Error(`No index for ${searchAttribute}`);
     }
     if (
-      !this.isIndexUnique(searchAttribute) &&
-      Object.keys(update).some((k) => this.isIndexUnique(k))
+      !this.indices.isUniqueIndex(searchAttribute) &&
+      Object.keys(update).some((k) => this.indices.isUniqueIndex(k))
     ) {
       throw new Error('duplicate');
     }
@@ -88,7 +90,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<number> {
-    if (!this.isIndexed(searchAttribute)) {
+    if (!this.indices.isIndex(searchAttribute)) {
       throw new Error(`No index for ${searchAttribute}`);
     }
     await this.innerPreAct();
@@ -120,21 +122,6 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     this.internalReady = undefined;
     this.innerPreAct = this.preAct.bind(this);
     pending.forEach((f) => f[0]());
-  }
-
-  protected isIndexed(attribute: string): boolean {
-    return (
-      attribute === 'id' ||
-      this.keys[attribute as keyof DBKeys<T>] !== undefined
-    );
-  }
-
-  protected isIndexUnique(attribute: string): boolean {
-    const keyOptions = this.keys[attribute as keyof DBKeys<T>];
-    return (
-      attribute === 'id' ||
-      Boolean(keyOptions && keyOptions.unique)
-    );
   }
 
   // eslint-disable-next-line class-methods-use-this

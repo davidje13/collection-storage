@@ -1,5 +1,5 @@
+import type { Collection, UpdateOptions, Indices } from '../interfaces/Collection';
 import type { IDable } from '../interfaces/IDable';
-import type { Collection, UpdateOptions } from '../interfaces/Collection';
 
 export type Wrapped<T extends IDable, Fields extends keyof T, FieldStorage> = {
   [K in keyof T]: K extends 'id' ? T[K] : K extends Fields ? FieldStorage : T[K];
@@ -50,7 +50,13 @@ export default class WrappedCollection<
     private readonly baseCollection: Collection<Inner>,
     private readonly fields: WF,
     private readonly wrapper: Wrapper<T, WF[-1], FieldStorage, E>,
-  ) {}
+  ) {
+    fields.forEach((field) => {
+      if (baseCollection.indices.isUniqueIndex(field)) {
+        throw new Error(`Cannot wrap unique index ${field}`);
+      }
+    });
+  }
 
   public async add(entry: T): Promise<void> {
     return this.baseCollection.add(await this.wrapAll(entry));
@@ -117,6 +123,10 @@ export default class WrappedCollection<
       await this.baseCollection.remove('id', item.id);
     }));
     return items.length;
+  }
+
+  public get indices(): Indices {
+    return this.baseCollection.indices;
   }
 
   private async wrapAll(

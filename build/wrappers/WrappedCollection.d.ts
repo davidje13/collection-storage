@@ -1,5 +1,5 @@
+import type { Collection, UpdateOptions, Indices } from '../interfaces/Collection';
 import type { IDable } from '../interfaces/IDable';
-import type { Collection, UpdateOptions } from '../interfaces/Collection';
 export declare type Wrapped<T extends IDable, Fields extends keyof T, FieldStorage> = {
     [K in keyof T]: K extends 'id' ? T[K] : K extends Fields ? FieldStorage : T[K];
 };
@@ -20,6 +20,7 @@ export default class WrappedCollection<T extends IDable, WF extends readonly (ke
     getAll<K extends keyof T & keyof Inner & string, F extends readonly (keyof T & string)[]>(key?: K, value?: T[K] & Inner[NonNullable<K>], fields?: F): Promise<Readonly<Pick<T, F[-1]>>[]>;
     update<K extends keyof T & keyof Inner & string>(key: K, value: T[K] & Inner[K], update: Partial<T>, options?: UpdateOptions): Promise<void>;
     remove<K extends keyof T & string>(key: K, value: T[K] & Inner[K]): Promise<number>;
+    get indices(): Indices;
     private wrapAll;
     private unwrapAll;
 }

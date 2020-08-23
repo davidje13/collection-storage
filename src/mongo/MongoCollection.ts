@@ -181,7 +181,7 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
   ): Promise<void> {
     const query = convertToMongo({ [searchAttribute]: searchValue });
     const mongoUpdate = { $set: convertToMongo(update) };
-    if (this.isIndexUnique(searchAttribute)) {
+    if (this.indices.isUniqueIndex(searchAttribute)) {
       await this.collection.updateOne(query, mongoUpdate);
     } else {
       await this.collection.updateMany(query, mongoUpdate);

@@ -264,6 +264,11 @@ enabling automatic compression of values.
 See the documentation for [migrate](#migrated) below for details on
 enabling automatic migrations on a per-record basis.
 
+## Caching
+
+See the documentation for [cache](#cached) below for details on
+enabling automatic caching of items.
+
 ## API
 
 ### CollectionStorage
@@ -501,6 +506,38 @@ const enc = encryptByKey(key);
 // be sure to apply compression and encryption in the correct order!
 const collection = compress(fields, enc(fields, baseCollection));
 ```
+
+### Cached
+
+#### `cache`
+
+```javascript
+const collection = cache(baseCollection, [options]);
+```
+
+Wraps a collection with read caching. Writes will still be recorded immediately
+and will be reflected in the cached data, but changes made by other clients
+will not be returned until the cache is deemed stale.
+
+This adds a small overhead to the backing collection as it will fetch the ID
+attribute for most operations even if not requested, but the ability to return
+cached data should outweigh this cost in almost all cases.
+
+By default, items in the cache never expire (unless found to be invalid when
+performing other operations, such as successfully reusing a unique index value)
+and the cache has an unlimited size. In real applications, this is unlikely to
+be desirable. You can configure the cache with the `options` object:
+
+```javascript
+const collection = cache(baseCollection, {
+  capacity: 128, // number of records to store (oldest items are removed)
+  maxAge: 1000, // max age in milliseconds
+});
+```
+
+If you want to test situations where the cache has expired, you can also
+specify `time`. This should be a function compatible with the `Date.now`
+signature (`Date.now` is the default).
 
 ### Migrated
 
