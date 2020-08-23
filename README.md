@@ -198,17 +198,17 @@ async function example() {
 
   // Option 2: unique key per value, non-encrypted key
   const keyCol2 = db.getCollection('keys2');
-  const enc2 = encryptByRecord(keyCol2, { cacheSize: 50 }); // cache 50 keys
+  const enc2 = encryptByRecord(keyCol2, { keyCache: { capacity: 50 } });
   const simpleCol2 = enc2(['foo'], db.getCollection('simple2'));
 
   // Option 3 (recommended): unique key per value, encrypted using global key
   const keyCol3 = db.getCollection('keys3');
-  const enc3 = encryptByRecordWithMasterKey(rootKey, keyCol3, { cacheSize: 50 }); // cache 50 keys
+  const enc3 = encryptByRecordWithMasterKey(rootKey, keyCol3, { keyCache: { capacity: 50 } });
   const simpleCol3 = enc3(['foo'], db.getCollection('simple3'));
 
   // option 3 is equivalent to:
   const keyCol4 = encryptByKey(rootKey)(['key'], db.getCollection('keys4'));
-  const enc4 = encryptByRecord(keyCol4, { cacheSize: 50 });
+  const enc4 = encryptByRecord(keyCol4, { keyCache: { capacity: 50 } });
   const simpleCol4 = enc4(['foo'], db.getCollection('simple4'));
 
   // For all options, the encryption is transparent:
@@ -416,9 +416,10 @@ const collection = enc(['myEncryptedField', 'another'], baseCollection);
 
 Returns a function which can wrap collections with encryption.
 
-Stores one key per ID in `keyCollection` (unencrypted). If `options.cacheSize`
-is provided, uses a least-recently-used cache for keys to reduce database
-access.
+Stores one key per ID in `keyCollection` (unencrypted).
+If `options.keyCache` is provided, uses a least-recently-used cache for keys
+to reduce database access. `keyCache` should be set to an object which
+contains the settings described for [cache](#cached).
 
 Updating a record re-encrypts using the same key. Removing records also
 removes the corresponding keys.
@@ -439,8 +440,9 @@ const collection = enc(['myEncryptedField', 'another'], baseCollection);
 Returns a function which can wrap collections with encryption.
 
 Stores one key per ID in `keyCollection` (encrypted using `masterKey`).
-If `options.cacheSize` is provided, uses a least-recently-used cache for keys
-to reduce database access.
+If `options.keyCache` is provided, uses a least-recently-used cache for keys
+to reduce database access. `keyCache` should be set to an object which
+contains the settings described for [cache](#cached).
 
 This is equivalent to:
 
@@ -534,6 +536,11 @@ const collection = cache(baseCollection, {
   maxAge: 1000, // max age in milliseconds
 });
 ```
+
+`capacity` and `maxAge` default to infinity. Note that items which expire
+due to `maxAge` will _not_ be removed from the cache automatically. You
+should specify a `capacity` to keep the cache from growing infinitely even
+when using a `maxAge`.
 
 If you want to test situations where the cache has expired, you can also
 specify `time`. This should be a function compatible with the `Date.now`

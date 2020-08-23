@@ -276,5 +276,11 @@ export function cache<T extends IDable>(
   baseCollection: Collection<T>,
   options: CacheOptions = {},
 ): Collection<T> {
+  if (
+    (options.capacity !== undefined && options.capacity <= 0) ||
+    (options.maxAge !== undefined && options.maxAge < 0)
+  ) {
+    return baseCollection;
+  }
   return new CachedCollection<T>(baseCollection, options);
 }

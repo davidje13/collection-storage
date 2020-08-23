@@ -203,6 +203,24 @@ describe('encryption', () => {
       expect(valueA!.key).not.toEqual(valueB!.key);
     });
 
+    it('does not cache keys by default', async () => {
+      await keyCol.remove('id', 'a');
+
+      await expect(col.get('id', 'a')).rejects
+        .toHaveProperty('message', 'No encryption key found for record');
+    });
+
+    it('caches keys if requested', async () => {
+      const enc = encryptByRecord(keyCol, { keyCache: { capacity: 1 } });
+      col = enc<TestType>()(['encrypted'], backingCol);
+
+      await col.get('id', 'a');
+      await keyCol.remove('id', 'a');
+
+      const value = await col.get('id', 'a');
+      expect(value!.encrypted).toEqual(9);
+    });
+
     it('stores non-encrypted values without modification', async () => {
       const value = await col.get('id', 'a');
       expect(value!.id).toEqual('a');

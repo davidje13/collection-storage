@@ -3,6 +3,7 @@ import type { IDable, IDableBy, IDType } from '../interfaces/IDable';
 import type { Collection } from '../interfaces/Collection';
 import { Wrapped } from './WrappedCollection';
 import type Encryption from './encryption/Encryption';
+import { CacheOptions } from './cached';
 export interface KeyRecord<ID extends IDType, KeyT> {
     id: ID;
     key: KeyT;
@@ -15,7 +16,7 @@ export interface EncryptionOptions<KeyT = Buffer, SerialisedKeyT = Buffer> {
     encryption?: Encryption<KeyT, SerialisedKeyT>;
 }
 export interface RecordEncryptionOptions {
-    cacheSize?: number;
+    keyCache?: CacheOptions;
 }
 interface CustomEncryptionOptions<KeyT, SerialisedKeyT> extends EncryptionOptions<KeyT, SerialisedKeyT> {
     encryption: Encryption<KeyT, SerialisedKeyT>;

@@ -33,6 +33,11 @@ describe('cache', () => {
     col = cache(backingCol, { capacity: 10, maxAge: 5000, time: mockTime });
   });
 
+  it('does not wrap the collection if no cache is requested', async () => {
+    expect(cache(backingCol, { capacity: 0 })).toBe(backingCol);
+    expect(cache(backingCol, { maxAge: -1 })).toBe(backingCol);
+  });
+
   describe('add', () => {
     it('stores values in the backing collection', async () => {
       await col.add(value);

@@ -5,6 +5,7 @@ import { serialiseValueBin, deserialiseValueBin } from '../helpers/serialiser';
 import WrappedCollection, { Wrapped } from './WrappedCollection';
 import type Encryption from './encryption/Encryption';
 import nodeEncryptionSync from './encryption/nodeEncryptionSync';
+import { cache, CacheOptions } from './cached';
 
 export interface KeyRecord<ID extends IDType, KeyT> {
   id: ID;
@@ -45,7 +46,7 @@ export interface EncryptionOptions<KeyT = Buffer, SerialisedKeyT = Buffer> {
 }
 
 export interface RecordEncryptionOptions {
-  cacheSize?: number;
+  keyCache?: CacheOptions;
 }
 
 interface CustomEncryptionOptions<KeyT, SerialisedKeyT>
@@ -104,10 +105,20 @@ function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
   {
     encryption = nodeEncryptionSync as any,
     allowRaw = false,
-    cacheSize = 0,
+    keyCache,
+    ...extraOptions
   }: EncryptionOptions<KeyT, SerialisedKeyT> & RecordEncryptionOptions = {},
 ): Encrypter<ID> {
-  const cache = new LruCache<ID, KeyT>(cacheSize);
+  if ((extraOptions as any).cacheSize) {
+    throw new Error('{ cacheSize: size } is deprecated; use { keyCache: { capacity: size } } instead');
+  }
+
+  if (keyCache) {
+    /* eslint-disable-next-line no-param-reassign */
+    keyCollection = cache(keyCollection, keyCache);
+  }
+
+  const rawKeyCache = new LruCache<SerialisedKeyT, KeyT>(1024);
 
   const loadKey = async (
     generateIfNeeded: boolean,
@@ -119,23 +130,22 @@ function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
       throw new Error('Must provide ID for encryption');
     }
 
-    return cache.cachedAsync(id, async () => {
-      const item = await keyCollection.get('id', id, ['key']);
-      if (item) {
-        return encryption.deserialiseKey(item.key);
-      }
-      if (!generateIfNeeded) {
-        throw new Error('No encryption key found for record');
-      }
-      const key = await encryption.generateKey();
-      await keyCollection.add({ id, key: encryption.serialiseKey(key) });
-      return key;
-    });
+    const item = await keyCollection.get('id', id, ['key']);
+    if (item) {
+      return rawKeyCache.cached(item.key, () => encryption.deserialiseKey(item.key));
+    }
+    if (!generateIfNeeded) {
+      throw new Error('No encryption key found for record');
+    }
+    const key = await encryption.generateKey();
+    const serialisedKey = encryption.serialiseKey(key);
+    await keyCollection.add({ id, key: serialisedKey });
+    rawKeyCache.add(serialisedKey, key);
+    return key;
   };
 
   const removeKey = async ({ id }: { id: ID }): Promise<void> => {
     await keyCollection.remove('id', id);
-    cache.remove(id);
   };
 
   // https://github.com/microsoft/TypeScript/issues/39080
