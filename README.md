@@ -10,7 +10,7 @@ in-memory storage.
 ## Install dependency
 
 ```bash
-npm install --save git+https://github.com/davidje13/collection-storage.git#semver:^3.0.0
+npm install --save collection-storage
 ```
 
 If you want to connect to a Mongo database, you will also need to add a
