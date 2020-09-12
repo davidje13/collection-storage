@@ -3,10 +3,8 @@
   "files.exclude": {
     "**/.eslintcache": true,
     "**/build": true,
-    "**/node_modules": true,
-    "**/package-lock.json": true
+    "**/node_modules": true
   },
   "javascript.preferences.quoteStyle": "single",
   "typescript.preferences.quoteStyle": "single"
 }
-
