@@ -110,8 +110,6 @@ export default class AWS {
       'X-Amz-Date': canonicalTime,
     };
 
-    // string comparison is intended
-    /* eslint-disable-next-line @typescript-eslint/require-array-sort-compare */
     const headerNames = Object.keys(allHeaders)
       .map((header) => header.toLowerCase())
       .sort();

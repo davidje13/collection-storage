@@ -16,8 +16,6 @@ export function canonicalJSON(o: Record<string, unknown> | undefined): string {
   if (!o) {
     return 'null';
   }
-  // string comparison is intended
-  /* eslint-disable-next-line @typescript-eslint/require-array-sort-compare */
   const content = Object.keys(o)
     .sort()
     .map((k) => `${JSON.stringify(k)}:${JSON.stringify(o[k])}`)
