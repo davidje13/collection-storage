@@ -1,5 +1,6 @@
 import type { Collection, UpdateOptions, Indices } from '../interfaces/Collection';
 import type { IDable } from '../interfaces/IDable';
+import { makeKeyValue } from '../helpers/safeAccess';
 
 export type Wrapped<T extends IDable, Fields extends keyof T, FieldStorage> = {
   [K in keyof T]: K extends 'id' ? T[K] : K extends Fields ? FieldStorage : T[K];
@@ -64,7 +65,7 @@ export default class WrappedCollection<
 
   public async get<
     K extends keyof T & keyof Inner & string,
-    F extends readonly (keyof T & string)[]
+    F extends readonly (string & keyof T)[]
   >(
     key: K,
     value: T[K] & Inner[K],
@@ -74,12 +75,12 @@ export default class WrappedCollection<
       throw new Error('Cannot get by wrapped value');
     }
     const raw = await this.baseCollection.get(key, value, fields!);
-    return raw ? this.unwrapAll(raw, { [key]: value }) : null;
+    return raw ? this.unwrapAll(raw, makeKeyValue(key, value)) : null;
   }
 
   public async getAll<
     K extends keyof T & keyof Inner & string,
-    F extends readonly (keyof T & string)[]
+    F extends readonly (string & keyof T)[]
   >(
     key?: K,
     value?: T[K] & Inner[NonNullable<K>],
@@ -89,7 +90,7 @@ export default class WrappedCollection<
       throw new Error('Cannot get by wrapped value');
     }
     const raw = await this.baseCollection.getAll(key!, value!, fields!);
-    const extra = (key !== undefined) ? { [key]: value } : undefined;
+    const extra = (key !== undefined) ? makeKeyValue(key, value) : undefined;
     return Promise.all(raw.map((v) => this.unwrapAll(v, extra)));
   }
 
@@ -102,11 +103,11 @@ export default class WrappedCollection<
     if (this.fields.includes(key as any)) {
       throw new Error('Cannot update by wrapped value');
     }
-    const converted = await this.wrapAll(update, { [key]: value });
+    const converted = await this.wrapAll(update, makeKeyValue(key, value));
     return this.baseCollection.update(key, value, converted, options);
   }
 
-  public async remove<K extends keyof T & string>(
+  public async remove<K extends string & keyof T>(
     key: K,
     value: T[K] & Inner[K],
   ): Promise<number> {
@@ -125,8 +126,8 @@ export default class WrappedCollection<
     return items.length;
   }
 
-  public get indices(): Indices {
-    return this.baseCollection.indices;
+  public get indices(): Indices<T> {
+    return this.baseCollection.indices as Indices<T>;
   }
 
   private async wrapAll(
@@ -151,6 +152,7 @@ export default class WrappedCollection<
     const converted = { ...v } as any;
     await Promise.all(this.fields.map(async (k) => {
       if (Object.prototype.hasOwnProperty.call(v, k)) {
+        // this is safe because converted is initialised from v, and k is in v
         converted[k] = await this.wrapper.wrap(k, (v as any)[k], processed);
       }
     }));
@@ -179,6 +181,7 @@ export default class WrappedCollection<
     const converted = { ...v } as any;
     await Promise.all(this.fields.map(async (k) => {
       if (Object.prototype.hasOwnProperty.call(v, k)) {
+        // this is safe because converted is initialised from v, and k is in v
         converted[k] = await this.wrapper.unwrap(k, (v as any)[k], processed);
       }
     }));

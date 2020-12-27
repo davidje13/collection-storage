@@ -2,6 +2,7 @@ import type AWS from './AWS';
 import { Results, Paged } from './Results';
 import AWSError from './AWSError';
 import retry from '../../helpers/retry';
+import { makeKeyValue, safeAdd, safeGet } from '../../helpers/safeAccess';
 
 // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/Welcome.html
 
@@ -128,6 +129,7 @@ function ifNotEmpty<T extends any[] | string>(l: T): T | undefined {
 }
 
 function flatten(value: DDBItem, keys: string[]): string {
+  // this is only used for internal short-term lookups, so securing value[key] is not necessary
   return keys.map((key) => JSON.stringify(value[key])).join();
 }
 
@@ -147,28 +149,37 @@ function escapedExpressions(
   let hasAnyValues = false;
   const result: Record<string, unknown> = {};
 
-  Object.keys(expressions).forEach((key) => {
-    const { attributeExpression, joiner, attributes } = expressions[key];
-
+  Object.entries(expressions).forEach(([key, { attributeExpression, joiner, attributes }]) => {
     const parts: string[] = [];
-    const hasValues = !Array.isArray(attributes);
-    const rawAttrNames = Array.isArray(attributes) ? attributes : Object.keys(attributes);
-    if (!rawAttrNames.length) {
-      return;
+    if (Array.isArray(attributes)) {
+      if (!attributes.length) {
+        return;
+      }
+      attributes.forEach((attr) => {
+        const attrName = `#${i}`;
+        const attrValue = `:${i}`;
+        parts.push(attributeExpression(attrName, attrValue));
+        safeAdd(attrNames, attrName, attr);
+        i += 1;
+      });
+    } else {
+      const rawAttr = Object.entries(attributes);
+      if (!rawAttr.length) {
+        return;
+      }
+      rawAttr.forEach(([attr, value]) => {
+        const attrName = `#${i}`;
+        const attrValue = `:${i}`;
+        parts.push(attributeExpression(attrName, attrValue));
+        safeAdd(attrNames, attrName, attr);
+        safeAdd(attrValues, attrValue, value);
+        i += 1;
+      });
+      hasAnyValues = true;
     }
 
-    rawAttrNames.forEach((attr) => {
-      const attrName = `#${i}`;
-      const attrValue = `:${i}`;
-      parts.push(attributeExpression(attrName, attrValue));
-      attrNames[attrName] = attr;
-      if (hasValues) {
-        attrValues[attrValue] = (attributes as DDBItem)[attr];
-      }
-      i += 1;
-    });
+    // key is trusted
     result[key] = typeof joiner === 'string' ? parts.join(joiner) : joiner(parts);
-    hasAnyValues = hasAnyValues || hasValues;
     hasExpr = true;
   });
 
@@ -456,21 +467,19 @@ export class DDB {
 
     await this.callBatched(keys, 100, async (batchKeys) => {
       const data: DDBBatchGetResponse = await this.call('BatchGetItem', {
-        RequestItems: {
-          [tableName]: {
-            ...tableQuery,
-            Keys: batchKeys,
-          },
-        },
+        RequestItems: makeKeyValue(tableName, {
+          ...tableQuery,
+          Keys: batchKeys,
+        }),
         ReturnConsumedCapacity: 'TOTAL',
       });
-      data.Responses[tableName].forEach((item) => {
+      safeGet(data.Responses, tableName)!.forEach((item) => {
         const index = indices.get(flatten(item, keyAttrs));
         if (index !== undefined) {
           extracted[index] = item;
         }
       });
-      return data.UnprocessedKeys[tableName]?.Keys || [];
+      return safeGet(data.UnprocessedKeys, tableName)?.Keys || [];
     });
 
     return extracted;
@@ -480,12 +489,12 @@ export class DDB {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html
     return this.callBatched(items, 25, async (batchItems) => {
       const data: DDBBatchWriteResponse = await this.call('BatchWriteItem', {
-        RequestItems: {
-          [tableName]: batchItems.map((item) => ({ PutRequest: { Item: item } })),
-        },
+        RequestItems: makeKeyValue(tableName, batchItems.map((item) => ({
+          PutRequest: { Item: item },
+        }))),
         ReturnConsumedCapacity: 'TOTAL',
       });
-      return (data.UnprocessedItems[tableName] || []).map((i) => i.PutRequest!.Item);
+      return (safeGet(data.UnprocessedItems, tableName) || []).map((i) => i.PutRequest!.Item);
     });
   }
 
@@ -493,12 +502,12 @@ export class DDB {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html
     return this.callBatched(keys, 25, async (batchKeys) => {
       const data: DDBBatchWriteResponse = await this.call('BatchWriteItem', {
-        RequestItems: {
-          [tableName]: batchKeys.map((key) => ({ DeleteRequest: { Key: key } })),
-        },
+        RequestItems: makeKeyValue(tableName, batchKeys.map((key) => ({
+          DeleteRequest: { Key: key },
+        }))),
         ReturnConsumedCapacity: 'TOTAL',
       });
-      return (data.UnprocessedItems[tableName] || []).map((i) => i.DeleteRequest!.Key);
+      return (safeGet(data.UnprocessedItems, tableName) || []).map((i) => i.DeleteRequest!.Key);
     });
   }
 
@@ -531,7 +540,7 @@ export class DDB {
     const nonColocatedAttrs: string[] = [];
     (requestedAttrs || []).forEach((attr) => {
       if (attr !== 'id') {
-        if (Object.hasOwnProperty.call(key, attr)) {
+        if (Object.prototype.hasOwnProperty.call(key, attr)) {
           colocatedAttrs.push(attr);
         } else {
           nonColocatedAttrs.push(attr);

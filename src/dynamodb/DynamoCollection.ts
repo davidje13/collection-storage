@@ -10,6 +10,7 @@ import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
 import type { DBKeys } from '../interfaces/DB';
 import { serialiseValueBin, deserialiseValueBin } from '../helpers/serialiser';
+import { makeKeyValue, mapEntries, safeGet } from '../helpers/safeAccess';
 
 const ConditionalCheckFailedException = 'ConditionalCheckFailedException';
 
@@ -24,7 +25,7 @@ async function runAll<T>(
   }));
   const failures = results.filter((s) => s.status === 'rejected') as PromiseRejectedResult[];
   if (failures.length) {
-    throw failures[0];
+    throw failures[0].reason;
   }
 }
 
@@ -57,19 +58,15 @@ function toDynamoValue(value: unknown): DDBValue {
 }
 
 function toDynamoItem(value: Record<string, unknown>): DDBItem {
-  const result: DDBItem = {};
-  Object.keys(value).forEach((key) => {
-    result[key] = toDynamoValue(value[key]);
-  });
-  return result;
+  return mapEntries(value, toDynamoValue);
 }
 
 function isDynamoBinary(value: DDBValue): value is { B: string } {
-  return Object.hasOwnProperty.call(value, 'B');
+  return Object.prototype.hasOwnProperty.call(value, 'B');
 }
 
 function isDynamoStringSet(value: DDBValue): value is { SS: string[] } {
-  return Object.hasOwnProperty.call(value, 'SS');
+  return Object.prototype.hasOwnProperty.call(value, 'SS');
 }
 
 function fromDynamoValue(value: DDBValue): unknown {
@@ -86,11 +83,7 @@ function fromDynamoItem<T = Record<string, unknown>>(value: DDBItem | null | und
   if (!value) {
     return null;
   }
-  const result: Record<string, unknown> = {};
-  Object.keys(value).forEach((key) => {
-    result[key] = fromDynamoValue(value[key]);
-  });
-  return result as T;
+  return mapEntries(value, fromDynamoValue) as T;
 }
 
 function toDynamoKey(attr: string, value: DDBValue): DDBValue {
@@ -192,7 +185,11 @@ async function configureTable(
     await ddb.getAllItems(tableName, ['id', ...attrs]).batched(async (items) => {
       const indexItems: DDBItem[] = [];
       items.forEach((item) => attrs.forEach((attr) => {
-        indexItems.push({ ix: toDynamoKey(attr, item[attr]), id: item.id });
+        const value = safeGet(item, attr);
+        if (!value) {
+          throw new Error(`Unable to migrate existing data (no value for ${attr})`);
+        }
+        indexItems.push({ ix: toDynamoKey(attr, value), id: item.id });
       }));
       return ddb.batchPutItems(indexTableName, indexItems);
     });
@@ -207,7 +204,7 @@ async function configureTable(
 }
 
 export default class DynamoCollection<T extends IDable> extends BaseCollection<T> {
-  private readonly uniqueKeys: (keyof T & string)[] = [];
+  private readonly uniqueKeys: (string & keyof T)[] = [];
 
   public constructor(
     private readonly ddb: DDB,
@@ -217,12 +214,12 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
   ) {
     super(keys);
 
-    const nonuniqueKeys: (keyof T & string)[] = [];
+    const nonuniqueKeys: (string & keyof T)[] = [];
     Object.entries(keys).forEach(([key, options]) => {
       if (options?.unique) {
-        this.uniqueKeys.push(key as (keyof T & string));
+        this.uniqueKeys.push(key as (string & keyof T));
       } else {
-        nonuniqueKeys.push(key as (keyof T & string));
+        nonuniqueKeys.push(key as (string & keyof T));
       }
     });
 
@@ -252,20 +249,20 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     update: Partial<T>,
   ): Promise<void> {
     const item = toDynamoItem({ id, ...update });
-    const { id: itemId, ...itemNoKey } = item;
-    const key = { id: itemId };
+    const key = { id: item.id };
+    delete item.id;
 
     // optimistically try to update
-    return this.updateItem(key, itemNoKey, key).catch(handleError(
+    return this.updateItem(key, item, key).catch(handleError(
       ConditionalCheckFailedException,
 
       // if that fails due to the item not existing, try creating it
-      () => this.putItem(item).catch(handleError(
+      () => this.putItem({ ...key, ...item }).catch(handleError(
         'duplicate id',
 
         // it that fails due to the item existing, the item was probably
         // created in the gap between calls; update it
-        () => this.updateItem(key, itemNoKey, key).catch(wrapError(
+        () => this.updateItem(key, item, key).catch(wrapError(
           ConditionalCheckFailedException,
 
           // if it fails again, give up
@@ -275,29 +272,40 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     ));
   }
 
-  protected async internalUpdate<K extends keyof T & string>(
+  protected async internalUpdate<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
-    { id: _, ...update }: Partial<T>,
+    item: Partial<T>,
   ): Promise<void> {
+    const update = toDynamoItem(item);
+    const setId = item.id;
+    delete update.id;
+
     if (searchAttribute === 'id') {
       await this.updateItem(
         toDynamoItem({ id: searchValue }),
-        toDynamoItem(update),
+        update,
       ).catch(handleError(ConditionalCheckFailedException, ignore));
     } else {
       const items = await this.internalGetAll(searchAttribute, searchValue, ['id']);
+      if (!items.length) {
+        return;
+      }
+      if (setId && (items.length > 1 || items[0].id !== setId)) {
+        throw new Error('Cannot update ID');
+      }
+      const search = toDynamoItem(makeKeyValue(searchAttribute, searchValue));
       await Promise.all(items.map(({ id }) => this.updateItem(
         toDynamoItem({ id }),
-        toDynamoItem(update),
-        toDynamoItem({ [searchAttribute]: searchValue }),
+        update,
+        search,
       ).catch(handleError(ConditionalCheckFailedException, ignore))));
     }
   }
 
   protected async internalGet<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute: K,
     searchValue: T[K],
@@ -315,7 +323,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
       const ddbItems = await this.ddb.getItemsBySecondaryKey(
         this.tableName,
         escapeName(searchAttribute),
-        toDynamoItem({ [searchAttribute]: searchValue }),
+        toDynamoItem(makeKeyValue(searchAttribute, searchValue)),
         returnAttributes,
         true,
       );
@@ -355,8 +363,8 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
   }
 
   protected async internalGetAll<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute?: K,
     searchValue?: T[K],
@@ -373,14 +381,14 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
     const items = await this.ddb.getItemsBySecondaryKey(
       this.tableName,
       escapeName(searchAttribute),
-      toDynamoItem({ [searchAttribute]: searchValue }),
+      toDynamoItem(makeKeyValue(searchAttribute, searchValue)),
       returnAttributes,
       false,
     );
     return items.map(fromDynamoItem) as Pick<T, F[-1]>[];
   }
 
-  protected async internalRemove<K extends keyof T & string>(
+  protected async internalRemove<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<number> {
@@ -398,7 +406,7 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
   private async atomicPutUniques(
     id: DDBValue,
     item: DDBItem,
-    uniqueKeys: (keyof T & string)[],
+    uniqueKeys: (string & keyof T)[],
     fn: () => Promise<void>,
   ): Promise<void> {
     if (!uniqueKeys.length) {
@@ -438,7 +446,9 @@ export default class DynamoCollection<T extends IDable> extends BaseCollection<T
   }
 
   private async updateItem(key: DDBItem, update: DDBItem, condition?: DDBItem): Promise<void> {
-    const updatedUnique = this.uniqueKeys.filter((a) => Object.hasOwnProperty.call(update, a));
+    const updatedUnique = this.uniqueKeys
+      .filter((a) => Object.prototype.hasOwnProperty.call(update, a));
+
     if (!updatedUnique.length) {
       await this.ddb.updateItem(this.tableName, key, update, condition);
       return;

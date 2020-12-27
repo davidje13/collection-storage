@@ -83,7 +83,7 @@ export default class AWS {
       throw new Error('AWS urls with query strings are not supported');
     }
     if (this.closed) {
-      throw new Error('connection closed');
+      throw new Error('Connection closed');
     }
 
     let binaryBody: Buffer;
@@ -165,7 +165,7 @@ export default class AWS {
     options: http.RequestOptions,
   ): Promise<FetchResponse> {
     if (this.closed) {
-      throw new Error('connection closed');
+      throw new Error('Connection closed');
     }
 
     const protocol = (url.protocol === 'https') ? https : http;

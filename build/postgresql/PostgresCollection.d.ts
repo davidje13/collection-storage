@@ -9,12 +9,12 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
     private readonly stateRef;
     private readonly cachedQueries;
     constructor(pool: PgPoolT, tableName: string, keys?: DBKeys<T>, stateRef?: StateRef);
-    protected internalAdd({ id, ...rest }: T): Promise<void>;
+    protected internalAdd(item: T): Promise<void>;
     protected internalUpsert(id: T['id'], update: Partial<T>): Promise<void>;
-    protected internalUpdate<K extends keyof T & string>(searchAttribute: K, searchValue: T[K], { id, ...rest }: Partial<T>): Promise<void>;
-    protected internalGet<K extends keyof T & string, F extends readonly (keyof T & string)[]>(searchAttribute: K, searchValue: T[K], returnAttributes?: F): Promise<Readonly<Pick<T, F[-1]>> | null>;
-    protected internalGetAll<K extends keyof T & string, F extends readonly (keyof T & string)[]>(searchAttribute?: K, searchValue?: T[K], returnAttributes?: F): Promise<Readonly<Pick<T, F[-1]>>[]>;
-    protected internalRemove<K extends keyof T & string>(searchAttribute: K, searchValue: T[K]): Promise<number>;
+    protected internalUpdate<K extends string & keyof T>(searchAttribute: K, searchValue: T[K], item: Partial<T>): Promise<void>;
+    protected internalGet<K extends string & keyof T, F extends readonly (string & keyof T)[]>(searchAttribute: K, searchValue: T[K], returnAttributes?: F): Promise<Readonly<Pick<T, F[-1]>> | null>;
+    protected internalGetAll<K extends string & keyof T, F extends readonly (string & keyof T)[]>(searchAttribute?: K, searchValue?: T[K], returnAttributes?: F): Promise<Readonly<Pick<T, F[-1]>>[]>;
+    protected internalRemove<K extends string & keyof T>(searchAttribute: K, searchValue: T[K]): Promise<number>;
     private runTableQuery;
 }
 //# sourceMappingURL=PostgresCollection.d.ts.map

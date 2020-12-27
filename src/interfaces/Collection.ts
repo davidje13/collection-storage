@@ -8,31 +8,31 @@ export interface UpdateOptions {
   upsert?: boolean;
 }
 
-export interface Indices {
-  getIndices(): string[];
+export interface Indices<T> {
+  getIndices(): (string & keyof T)[];
 
-  getUniqueIndices(): string[];
+  getUniqueIndices(): (string & keyof T)[];
 
-  getCustomIndices(): string[];
+  getCustomIndices(): (string & keyof T)[];
 
-  isIndex(attribute: string): boolean;
+  isIndex(attribute: string | keyof T): boolean;
 
-  isUniqueIndex(attribute: string): boolean;
+  isUniqueIndex(attribute: string | keyof T): boolean;
 }
 
 export interface Collection<T extends IDable> {
-  readonly indices: Readonly<Indices>;
+  readonly indices: Readonly<Indices<T>>;
 
   add(entry: T): Promise<void>;
 
-  get<K extends keyof T & string>(
+  get<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<Readonly<T> | null>;
 
   get<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute: K,
     searchValue: T[K],
@@ -41,28 +41,28 @@ export interface Collection<T extends IDable> {
 
   getAll(): Promise<Readonly<T>[]>;
 
-  getAll<K extends keyof T & string>(
+  getAll<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<Readonly<T>[]>;
 
   getAll<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[],
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[],
   >(
     searchAttribute: K,
     searchValue: T[K],
     returnAttributes: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]>;
 
-  update<K extends keyof T & string>(
+  update<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
     update: Partial<T>,
     options?: UpdateOptions,
   ): Promise<void>;
 
-  remove<K extends keyof T & string>(
+  remove<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<number>;

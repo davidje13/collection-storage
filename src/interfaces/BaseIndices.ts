@@ -1,32 +1,34 @@
-import type { Indices } from './Collection';
+import type { Indices, KeyOptions } from './Collection';
+import type { IDable } from './IDable';
 import type { DBKeys } from './DB';
 
-export default class BaseIndices implements Indices {
-  constructor(private readonly keys: DBKeys<any>) {}
+export default class BaseIndices<T extends IDable> implements Indices<T> {
+  private readonly keys: Map<string & keyof T, KeyOptions>;
 
-  public getIndices(): string[] {
-    return ['id', ...Object.keys(this.keys)];
+  constructor(keys: DBKeys<T>) {
+    this.keys = new Map<any, any>(Object.entries(keys).filter(([, v]) => v));
   }
 
-  public getUniqueIndices(): string[] {
-    return ['id', ...Object.entries(this.keys).filter(([, o]) => o?.unique).map(([n]) => n)];
+  public getIndices(): (string & keyof T)[] {
+    return ['id', ...this.keys.keys()];
   }
 
-  public getCustomIndices(): string[] {
-    return Object.keys(this.keys);
+  public getUniqueIndices(): (string & keyof T)[] {
+    return ['id', ...[...this.keys.entries()].filter(([, o]) => o?.unique).map(([n]) => n)];
   }
 
-  public isIndex(attribute: string): boolean {
-    return (
+  public getCustomIndices(): (string & keyof T)[] {
+    return [...this.keys.keys()];
+  }
+
+  public isIndex(attribute: string | keyof T): boolean {
+    return (attribute === 'id' || this.keys.has(attribute as (string & keyof T)));
+  }
+
+  public isUniqueIndex(attribute: string | keyof T): boolean {
+    return Boolean(
       attribute === 'id' ||
-      this.keys[attribute] !== undefined
-    );
-  }
-
-  public isUniqueIndex(attribute: string): boolean {
-    return (
-      attribute === 'id' ||
-      Boolean(this.keys[attribute]?.unique)
+      this.keys.get(attribute as (string & keyof T))?.unique,
     );
   }
 }

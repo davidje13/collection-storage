@@ -12,7 +12,7 @@ interface TestType {
 const INITIAL_TIME = Date.now();
 const value = { id: 'i1', unique: 'u1', nonunique: 'n1' };
 
-async function clearAll(col: Collection<IDable>): Promise<void> {
+async function clearAll<T extends IDable>(col: Collection<T>): Promise<void> {
   const items = await col.getAll();
   await Promise.all(items.map(({ id }) => col.remove('id', id)));
 }

@@ -34,12 +34,26 @@ function getUniqueName(): string {
   return `test-${time.substr(time.length - 7)}${random}`;
 }
 
+function make(...keyValuePairs: unknown[]): Record<string, any> {
+  const result = {};
+  for (let i = 0; i < keyValuePairs.length; i += 2) {
+    Object.defineProperty(result, keyValuePairs[i] as string, {
+      value: keyValuePairs[i + 1],
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    });
+  }
+  return result;
+}
+
 interface ConfigT<T extends DB> {
   beforeAll?: () => Promise<void> | void;
   factory: () => Promise<T> | T;
   testWrapper?: TestWrapper<() => T>;
   afterAll?: () => Promise<void> | void;
   testMigration?: boolean;
+  testNastyValues?: boolean;
 }
 
 const nop = (): void => undefined;
@@ -64,6 +78,7 @@ export default <T extends DB>({
   testWrapper,
   afterAll: afterAllFn = nop,
   testMigration = true,
+  testNastyValues = true,
 }: ConfigT<T>): void => {
   let db: T;
   let col: Collection<TestType>;
@@ -97,41 +112,6 @@ export default <T extends DB>({
 
     expect(retrieved).toEqual(stored);
     expect(retrieved).not.toBe(stored);
-  });
-
-  it('allows special characters in collection names', async () => {
-    const name = 'test-\\s\'p"e-c_i+a=l&c$h!a:r;a?c,t.e(r)s%h[e]r{e}\\';
-    col = db.getCollection(name);
-
-    const stored = { id: '1', value: 'foo' };
-    await col.add(stored);
-    const retrieved = await col.get('id', stored.id);
-
-    expect(retrieved).toEqual(stored);
-  });
-
-  it('allows special characters in attribute names', async () => {
-    const attribute = '\\s\'p"e-c_i+a=l&c$h!a:r;a?c,t.e(r)s%h[e]r{e}\\';
-    const specialCharCol = db.getCollection<any>(getUniqueName());
-
-    const stored = { id: '1', [attribute]: 'foo' };
-    await specialCharCol.add(stored);
-    const retrieved = await specialCharCol.get('id', stored.id);
-
-    expect(retrieved).toEqual(stored);
-  });
-
-  it('allows special characters in indices', async () => {
-    const attribute = '\\s\'p"e-c_i+a=l&c$h!a:r;a?c,t.e(r)s%h[e]r{e}\\';
-    const specialCharCol = db.getCollection<any>(getUniqueName(), {
-      [attribute]: { unique: true },
-    });
-
-    const stored = { id: '1', [attribute]: 'foo' };
-    await specialCharCol.add(stored);
-    const retrieved = await specialCharCol.get(attribute, 'foo');
-
-    expect(retrieved).toEqual(stored);
   });
 
   it('stores and retrieves JSON data', async () => {
@@ -181,7 +161,7 @@ export default <T extends DB>({
 
     await db.close();
 
-    await expect(col.add({ id: '2', value: 'bar' })).rejects.not.toBeNull();
+    await expect(col.add({ id: '2', value: 'bar' })).rejects.toThrow('Connection closed');
   });
 
   it('survives immediate database closure', async () => {
@@ -189,7 +169,7 @@ export default <T extends DB>({
     col = db.getCollection(getUniqueName(), { idx: {}, value: { unique: true } });
     await db.close(); // close before database setup has completed
 
-    await expect(col.add({ id: '1', value: 'foo' })).rejects.not.toBeNull();
+    await expect(col.add({ id: '1', value: 'foo' })).rejects.toThrow('Connection closed');
   });
 
   it('ignores duplicate close() calls', async () => {
@@ -230,7 +210,7 @@ export default <T extends DB>({
 
       await col.add({ id: '2', value: 'bar' });
       await col.add({ id: '3', value: 'baz' });
-      await expect(col.add({ id: '2', value: 'nope' })).rejects.not.toBeNull();
+      await expect(col.add({ id: '2', value: 'nope' })).rejects.toThrow('duplicate');
     });
 
     it('rejects duplicates in unique indices', async () => {
@@ -240,7 +220,7 @@ export default <T extends DB>({
 
       await col.add({ id: '1', idx: 8 });
       await col.add({ id: '2', idx: 9 });
-      await expect(col.add({ id: '3', idx: 8 })).rejects.not.toBeNull();
+      await expect(col.add({ id: '3', idx: 8 })).rejects.toThrow('duplicate');
     });
   });
 
@@ -272,7 +252,7 @@ export default <T extends DB>({
     });
 
     it('rejects filters using unindexed keys', async () => {
-      await expect(col.get('b', 'B1')).rejects.not.toBeNull();
+      await expect(col.get('b', 'B1')).rejects.toThrow('No index');
     });
 
     it('returns null if no values match', async () => {
@@ -370,7 +350,7 @@ export default <T extends DB>({
     });
 
     it('rejects filters using unindexed keys', async () => {
-      await expect(col.getAll('b', 'B1')).rejects.not.toBeNull();
+      await expect(col.getAll('b', 'B1')).rejects.toThrow('No index');
     });
 
     it('returns an empty list if no values match', async () => {
@@ -411,7 +391,7 @@ export default <T extends DB>({
     });
 
     it('rejects and rolls-back changes which cause duplicates', async () => {
-      await expect(col.update('id', '2', { a: 'A1' })).rejects.not.toBeNull();
+      await expect(col.update('id', '2', { a: 'A1' })).rejects.toThrow('duplicate');
 
       const v2 = await col.get('id', '2');
       expect(v2!.a).toEqual('A2');
@@ -434,10 +414,10 @@ export default <T extends DB>({
     });
 
     it('rejects attempts to change the ID', async () => {
-      await expect(col.update('id', '2', { id: '4' })).rejects.not.toBeNull();
+      await expect(col.update('id', '2', { id: '4' })).rejects.toThrow('Cannot update ID');
 
       const v2 = await col.get('id', '2');
-      expect(v2).not.toEqual(null);
+      expect(v2).toBeTruthy();
     });
 
     it('allows setting ID to the same value', async () => {
@@ -445,6 +425,21 @@ export default <T extends DB>({
 
       const v2 = await col.get('id', '2');
       expect(v2!.b).toEqual('updated');
+    });
+
+    it('allows setting ID to the same value via another property', async () => {
+      await col.update('a', 'A2', { id: '2', b: 'updated' });
+
+      const v2 = await col.get('id', '2');
+      expect(v2!.b).toEqual('updated');
+    });
+
+    it('rejects attempts to change the ID via another property and rolls back', async () => {
+      await expect(col.update('a', 'A2', { id: '4', b: 'new' })).rejects.toThrow('Cannot update ID');
+
+      const v2 = await col.get('id', '2');
+      expect(v2).toBeTruthy();
+      expect(v2!.b).toEqual('B2');
     });
 
     it('changes all matching entries', async () => {
@@ -458,7 +453,7 @@ export default <T extends DB>({
     });
 
     it('rejects conflicts from changing multiple records', async () => {
-      await expect(col.update('idxs', '2', { a: 'multi' })).rejects.not.toBeNull();
+      await expect(col.update('idxs', '2', { a: 'multi' })).rejects.toThrow('duplicate');
       const [v2, v3] = await runAll([
         col.get('id', '2'),
         col.get('id', '3'),
@@ -488,7 +483,7 @@ export default <T extends DB>({
     });
 
     it('rejects filters using unindexed keys', async () => {
-      await expect(col.update('b', 'B2', { a: 'updated' })).rejects.not.toBeNull();
+      await expect(col.update('b', 'B2', { a: 'updated' })).rejects.toThrow('No index');
     });
 
     describe('upsert', () => {
@@ -517,13 +512,13 @@ export default <T extends DB>({
 
       it('rejects attempts to upsert using a non-ID index', async () => {
         const data = { id: '6', idxs: 'w', a: 'y', b: 'z' };
-        await expect(col.update('a', 'x', data, { upsert: true })).rejects.not.toBeNull();
+        await expect(col.update('a', 'x', data, { upsert: true })).rejects.toThrow('Can only upsert by ID');
         const all = await col.getAll();
         expect(all.length).toEqual(3);
       });
 
       it('rejects duplicates if no value matches', async () => {
-        await expect(col.update('id', '6', { a: 'A2' }, { upsert: true })).rejects.not.toBeNull();
+        await expect(col.update('id', '6', { a: 'A2' }, { upsert: true })).rejects.toThrow('duplicate');
         const all = await col.getAll();
         expect(all.length).toEqual(3);
       });
@@ -580,7 +575,7 @@ export default <T extends DB>({
     });
 
     it('rejects filters using unindexed keys', async () => {
-      await expect(col.remove('b', 'B2')).rejects.not.toBeNull();
+      await expect(col.remove('b', 'B2')).rejects.toThrow('No index');
     });
   });
 
@@ -626,6 +621,149 @@ export default <T extends DB>({
         await runAll(tasks.map((t) => t()));
 
         expect(await c.get('id', '1')).toEqual(expected);
+      });
+    });
+  });
+
+  describe('security', () => {
+    [
+      { name: 'special characters', test: 'test-\\s\'p"e-c_i+a=l&c$h!a:r;a?c,t.e(r)s%h[e]r{e}\\' },
+      { name: 'malicious (__proto__)', test: '__proto__' },
+      { name: 'malicious (constructor)', test: 'constructor' },
+      { name: 'malicious (hasOwnProperty)', test: 'hasOwnProperty' },
+    ].forEach(({ name, test }) => {
+      it(`allows ${name} in collection names`, async () => {
+        col = db.getCollection(test);
+
+        await col.add({ id: '1', value: 'foo' });
+        expect(await col.get('id', '1')).toEqual({ id: '1', value: 'foo' });
+
+        await col.update('id', '1', { value: 'bar' });
+        expect(await col.get('id', '1')).toEqual({ id: '1', value: 'bar' });
+
+        await col.update('id', '2', { value: 'wee' }, { upsert: true });
+        expect(await col.get('id', '2')).toEqual({ id: '2', value: 'wee' });
+
+        await col.update('id', '2', { value: 'woo' }, { upsert: true });
+        expect(await col.get('id', '2')).toEqual({ id: '2', value: 'woo' });
+      });
+
+      it(`allows ${name} in attribute names`, async () => {
+        const col2 = db.getCollection<any>(getUniqueName());
+
+        // Basic add, get, partial get
+        await col2.add(make('id', '1', test, 'foo'));
+
+        const retrieved = await col2.get('id', '1');
+        expect(retrieved).toBeTruthy();
+        expect(retrieved!.id).toEqual('1');
+        expect(retrieved![test]).toEqual('foo');
+
+        const retrievedPart = await col2.get('id', '1', ['id', test]);
+        expect(retrievedPart).toBeTruthy();
+        expect(retrievedPart!.id).toEqual('1');
+        expect(retrievedPart![test]).toEqual('foo');
+
+        // Update
+        await col2.update('id', '1', make(test, 'bar'));
+
+        const retrievedUpdated = await col2.get('id', '1');
+        expect(retrievedUpdated![test]).toEqual('bar');
+
+        // Upsert
+        await col2.update('id', '2', make(test, 'wee'), { upsert: true });
+
+        const retrievedUpserted = await col2.get('id', '2');
+        expect(retrievedUpserted![test]).toEqual('wee');
+
+        await col2.update('id', '2', make(test, 'woo'), { upsert: true });
+
+        const retrievedUpserted2 = await col2.get('id', '2');
+        expect(retrievedUpserted2![test]).toEqual('woo');
+
+        // Add without field
+        await col2.add({ id: '3' });
+
+        const retrievedWithout = await col2.get('id', '3');
+        expect(retrievedWithout!.id).toEqual('3');
+        expect(Object.prototype.hasOwnProperty.call(retrievedWithout, test)).toBeFalsy();
+
+        expect(retrievedWithout!.constructor).toBe(Object);
+        /* eslint-disable-next-line no-proto */
+        expect(retrievedWithout!.__proto__).toBe(Object.prototype);
+        /* eslint-disable-next-line @typescript-eslint/unbound-method */
+        expect(retrievedWithout!.hasOwnProperty).toBe(Object.prototype.hasOwnProperty);
+
+        // Malicious add
+        await col2.add(make('id', '4', test, { attack: 'eep' }));
+        const retrievedMalicious = await col2.get('id', '4');
+        expect(retrievedMalicious!.attack).toBeUndefined();
+        expect(({} as any).attack).toBeUndefined();
+      });
+
+      it(`allows ${name} in values`, async () => {
+        if (!testNastyValues) {
+          return;
+        }
+
+        const col2 = db.getCollection<any>(getUniqueName());
+
+        // Basic add, get, partial get
+        await col2.add({ id: '1', value: make(test, 'foo') });
+
+        const retrieved = await col2.get('id', '1');
+        expect(retrieved).toBeTruthy();
+        expect(retrieved!.value[test]).toEqual('foo');
+
+        const retrievedPart = await col2.get('id', '1', ['value']);
+        expect(retrievedPart).toBeTruthy();
+        expect(retrievedPart!.value[test]).toEqual('foo');
+
+        // Update
+        await col2.update('id', '1', { value: make(test, 'bar') });
+
+        const retrievedUpdated = await col2.get('id', '1');
+        expect(retrievedUpdated!.value[test]).toEqual('bar');
+
+        // Malicious add
+        await col2.add({ id: '2', value: make(test, { attack: 'eep' }) });
+        const retrievedMalicious = await col2.get('id', '2');
+        expect(retrievedMalicious!.value.attack).toBeUndefined();
+        expect(({} as any).attack).toBeUndefined();
+      });
+
+      it(`allows ${name} in indices`, async () => {
+        const col2 = db.getCollection<any>(getUniqueName(), make(test, { unique: true }));
+
+        // Basic add, get
+        await col2.add(make('id', '1', test, 'foo'));
+
+        const retrieved = await col2.get(test, 'foo');
+        expect(retrieved).toBeTruthy();
+        expect(retrieved!.id).toEqual('1');
+        expect(retrieved![test]).toEqual('foo');
+
+        // Update by id, attribute
+        await col2.update('id', '1', make(test, 'bar'));
+
+        const retrievedUpdated = await col2.get('id', '1');
+        expect(retrievedUpdated![test]).toEqual('bar');
+
+        await col2.update(test, 'bar', make(test, 'baz'));
+
+        const retrievedUpdated2 = await col2.get('id', '1');
+        expect(retrievedUpdated2![test]).toEqual('baz');
+
+        // Upsert
+        await col2.update('id', '2', make(test, 'wee'), { upsert: true });
+
+        const retrievedUpserted = await col2.get('id', '2');
+        expect(retrievedUpserted![test]).toEqual('wee');
+
+        await col2.update('id', '2', make(test, 'woo'), { upsert: true });
+
+        const retrievedUpserted2 = await col2.get('id', '2');
+        expect(retrievedUpserted2![test]).toEqual('woo');
       });
     });
   });
@@ -681,7 +819,7 @@ export default <T extends DB>({
       it('adds unique indices with existing data', async () => {
         col = db.getCollection(name, { idx: {}, value: { unique: true }, b: { unique: true } });
 
-        await expect(col.add({ id: '4', idx: 4, value: 'v4', a: 'a4', b: 'b3' })).rejects.not.toBeNull();
+        await expect(col.add({ id: '4', idx: 4, value: 'v4', a: 'a4', b: 'b3' })).rejects.toThrow('duplicate');
 
         expect(new Set(await col.getAll('b', 'b2'))).toEqual(new Set([
           { id: '2', idx: 2, value: 'v2', a: 'a2', b: 'b2' },
@@ -691,7 +829,7 @@ export default <T extends DB>({
       it('adds uniqueness to existing indices', async () => {
         col = db.getCollection(name, { idx: { unique: true }, value: { unique: true } });
 
-        await expect(col.add({ id: '4', idx: 3, value: 'v4', a: 'a4', b: 'b4' })).rejects.not.toBeNull();
+        await expect(col.add({ id: '4', idx: 3, value: 'v4', a: 'a4', b: 'b4' })).rejects.toThrow('duplicate');
 
         expect(new Set(await col.getAll('idx', 2))).toEqual(new Set([
           { id: '2', idx: 2, value: 'v2', a: 'a2', b: 'b2' },
@@ -703,7 +841,7 @@ export default <T extends DB>({
 
         col = db.getCollection(name, { idx: { unique: true }, value: { unique: true } });
         // exception is asynchronous, so will not be seen until first operation:
-        await expect(col.getAll()).rejects.not.toBeNull();
+        await expect(col.getAll()).rejects.toThrow();
       });
 
       it('removes uniqueness from existing indices', async () => {
@@ -720,7 +858,7 @@ export default <T extends DB>({
       it('removes indices', async () => {
         col = db.getCollection(name, { value: { unique: true } });
 
-        await expect(col.getAll('idx', 1)).rejects.not.toBeNull();
+        await expect(col.getAll('idx', 1)).rejects.toThrow('No index');
       });
 
       it('removes unique indices', async () => {
@@ -728,7 +866,7 @@ export default <T extends DB>({
 
         await col.add({ id: '4', idx: 4, value: 'v3', a: 'a4', b: 'b4' });
 
-        await expect(col.getAll('value', 'v2')).rejects.not.toBeNull();
+        await expect(col.getAll('value', 'v2')).rejects.toThrow('No index');
       });
 
       /* eslint-enable object-curly-newline */

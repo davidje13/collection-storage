@@ -4,7 +4,7 @@ import type { DBKeys } from './DB';
 import BaseIndices from './BaseIndices';
 
 export default abstract class BaseCollection<T extends IDable> implements Collection<T> {
-  public readonly indices: Readonly<Indices>;
+  public readonly indices: Readonly<Indices<T>>;
 
   // actually read publicly by BaseDB but we don't want this to be a user-accessible property
   protected internalReady?: () => Promise<void>;
@@ -22,8 +22,8 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
   }
 
   public async get<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute: K,
     searchValue: T[K],
@@ -37,8 +37,8 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
   }
 
   public async getAll<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute?: K,
     searchValue?: T[K],
@@ -51,7 +51,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     return this.internalGetAll(searchAttribute, searchValue, returnAttributes);
   }
 
-  public async update<K extends keyof T & string>(
+  public async update<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
     update: Partial<T>,
@@ -86,7 +86,7 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
     return this.internalUpdate(searchAttribute, searchValue, update, options);
   }
 
-  public async remove<K extends keyof T & string>(
+  public async remove<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<number> {
@@ -128,8 +128,8 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
   protected preAct(): Promise<void> | void {}
 
   protected async internalGet<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute: K,
     searchValue: T[K],
@@ -150,22 +150,22 @@ export default abstract class BaseCollection<T extends IDable> implements Collec
   protected abstract internalAdd(entry: T): Promise<void>;
 
   protected abstract internalGetAll<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute?: K,
     searchValue?: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]>;
 
-  protected abstract internalUpdate<K extends keyof T & string>(
+  protected abstract internalUpdate<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
     update: Partial<T>,
     options: UpdateOptions,
   ): Promise<void>;
 
-  protected abstract internalRemove<K extends keyof T & string>(
+  protected abstract internalRemove<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<number>;

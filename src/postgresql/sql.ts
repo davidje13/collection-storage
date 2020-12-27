@@ -12,7 +12,7 @@ export function quoteValue(msg: string): string {
 
 const ID_REG = /\$[A-Z]/g;
 export function withIdentifiers(
-  base: string,
+  base: string, // expects trusted (internal) source
   identifiers: Record<string, string>,
 ): string {
   return base.replace(

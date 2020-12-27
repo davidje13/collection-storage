@@ -6,49 +6,61 @@ import {
   serialiseValue,
   serialiseRecord,
   deserialiseRecord,
+  Serialised,
 } from '../helpers/serialiser';
 import type RedisConnectionPool from './RedisConnectionPool';
 import { multiExec } from './helpers';
 import type { ERedis } from './scripts';
 
 interface Key<T> {
-  key: keyof T & string;
+  key: string & keyof T;
   prefix: string;
 }
 
-interface InternalPatch {
+interface InternalPatch<T> {
   sId: string;
-  oldSerialised: Record<string, string | null>;
-  newSerialised: Record<string, string>;
+  oldSerialised: Serialised<T>;
+  newSerialised: Serialised<T>;
 }
 
 const notUndefined = <T>(item?: T): item is T => (item !== undefined);
 
-function makeIndexKeys(
-  keys: Key<any>[],
-  partialSerialisedValue: Record<string, string | null>,
+function makeIndexKeys<T>(
+  keys: Key<T>[],
+  partialSerialisedValue: Serialised<T>,
 ): string[] {
   return keys
-    .filter(({ key }) => partialSerialisedValue[key])
-    .map(({ key, prefix }) => `${prefix}:${partialSerialisedValue[key]}`);
+    .filter(({ key }) => partialSerialisedValue.has(key))
+    .map(({ key, prefix }) => `${prefix}:${partialSerialisedValue.get(key)}`);
 }
 
-function parseItem(
-  item: (string | null)[] | Record<string, string | null>,
-  fields?: readonly string[],
-): Record<string, string | null> {
-  if (!fields) {
-    return item as any;
+function parseItem<T>(
+  item: (string | null)[],
+  fields?: readonly (string & keyof T)[],
+): Serialised<T> | undefined {
+  if (!item.length) {
+    return undefined;
   }
-  const result: Record<string, string | null> = {};
-  for (let f = 0; f < fields.length; f += 1) {
-    result[fields[f]] = (item as any)[f];
+  const result = new Map<string & keyof T, string>();
+  if (fields) {
+    // item is values in same order as fields
+    fields.forEach((field, index) => {
+      const v = item[index];
+      if (v) {
+        result.set(field, v);
+      }
+    });
+  } else {
+    // item is key1, value1, key2, value2, ...
+    for (let i = 0; i < item.length; i += 2) {
+      const field = item[i];
+      const v = item[i + 1];
+      if (v) {
+        result.set(field as (string & keyof T), v);
+      }
+    }
   }
-  return result;
-}
-
-function itemHasContent(item: Record<string, string | null>): boolean {
-  return Object.values(item).some((v) => (v !== null));
+  return result.size > 0 ? result : undefined;
 }
 
 async function unwatchAll(client: ERedis): Promise<void> {
@@ -68,7 +80,7 @@ async function mapAwaitSync<T, O>(
 }
 
 export default class RedisCollection<T extends IDable> extends BaseCollection<T> {
-  private readonly keyPrefixes: { [K in keyof T]?: string } = {};
+  private readonly keyPrefixes = new Map<string & keyof T, string>();
 
   private readonly uniqueKeys: Key<T>[] = [];
 
@@ -81,10 +93,9 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
   ) {
     super(keys);
 
-    this.indices.getCustomIndices().forEach((k) => {
-      const key = k as keyof DBKeys<T>;
+    this.indices.getCustomIndices().forEach((key) => {
       const keyPrefix = `${prefix}-${key}`;
-      this.keyPrefixes[key] = keyPrefix;
+      this.keyPrefixes.set(key, keyPrefix);
       const keyInfo = { key, prefix: keyPrefix };
       if (this.indices.isUniqueIndex(key)) {
         this.uniqueKeys.push(keyInfo);
@@ -104,7 +115,7 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
     });
   }
 
-  protected internalUpdate<K extends keyof T & string>(
+  protected internalUpdate<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
     update: Partial<T>,
@@ -119,7 +130,7 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
         if (patch) {
           await this.runUpdates(client, [patch]);
         } else if (upsert) {
-          const insertValue = { ...patchSerialised, id: sKey };
+          const insertValue = new Map(patchSerialised).set('id', sKey);
           if (!await this.runAdd(client, insertValue, true)) {
             throw new Error('duplicate');
           }
@@ -129,6 +140,16 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
 
     return this.pool.retryWithConnection(async (client) => {
       const sIds = await this.getAndWatchBySerialisedKey(client, searchAttribute, sKey);
+      if (!sIds.length) {
+        return;
+      }
+      if (
+        update.id &&
+        searchAttribute !== 'id' &&
+        (sIds.length > 1 || serialiseValue(update.id) !== sIds[0])
+      ) {
+        throw new Error('Cannot update ID');
+      }
       const patches = (await mapAwaitSync(
         sIds,
         (sId) => this.getUpdatePatch(client, sId, patchSerialised),
@@ -138,8 +159,8 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
   }
 
   protected internalGet<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute: K,
     searchValue: T[K],
@@ -157,28 +178,35 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
   }
 
   protected internalGetAll<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute?: K,
     searchValue?: T[K],
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
-    return this.pool.retryWithConnection(async (client) => {
-      let sIds: string[];
-      if (searchAttribute) {
+    if (searchAttribute) {
+      return this.pool.retryWithConnection(async (client) => {
         const sKey = serialiseValue(searchValue);
-        sIds = await this.getAndWatchBySerialisedKey(client, searchAttribute, sKey);
-      } else {
-        sIds = await client.keys(this.makeKey('*'));
-        const cut = this.prefix.length + 1;
-        sIds = sIds.map((v) => v.substr(cut));
+        const sIds = await this.getAndWatchBySerialisedKey(client, searchAttribute, sKey);
+        return this.getByKeysKeepWatches(client, sIds, returnAttributes);
+      }, unwatchAll);
+    }
+
+    const cut = this.prefix.length + 1;
+    return this.pool.retryWithConnection(async (client) => {
+      const stream = client.scanStream({ match: this.makeKey('*'), count: 100 });
+      const result: Pick<T, F[-1]>[] = [];
+      /* eslint-disable-next-line no-restricted-syntax */ // supported natively in Node 10+
+      for await (const batch of stream) {
+        const sIds = (batch as string[]).map((v) => v.substr(cut));
+        result.push(...await this.getByKeysKeepWatches(client, sIds, returnAttributes));
       }
-      return this.getByKeysKeepWatches(client, sIds, returnAttributes);
+      return result;
     }, unwatchAll);
   }
 
-  protected internalRemove<K extends keyof T & string>(
+  protected internalRemove<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<number> {
@@ -198,14 +226,15 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
 
       const pipeline = client.multi();
       items.forEach((item) => {
+        const id = item.get('id')!;
         const uniqueKeys = makeIndexKeys(this.uniqueKeys, item);
         const nonUniqueKeys = makeIndexKeys(this.nonUniqueKeys, item);
         pipeline.remove(
           1 + uniqueKeys.length + nonUniqueKeys.length,
-          this.makeKey(item.id!),
+          this.makeKey(id),
           ...uniqueKeys,
           ...nonUniqueKeys,
-          item.id!,
+          id,
         );
       });
       await pipeline.exec();
@@ -219,9 +248,10 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
 
   private async runAdd(
     client: ERedis,
-    { id, ...serialised }: Record<string, string>,
+    serialised: Serialised<T>,
     checkWatch: boolean,
   ): Promise<boolean> {
+    const id = serialised.get('id')!;
     const uniqueKeys = makeIndexKeys(this.uniqueKeys, serialised);
     const nonUniqueKeys = makeIndexKeys(this.nonUniqueKeys, serialised);
 
@@ -233,7 +263,7 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
       uniqueKeys.length,
       'id', // ID is always first in flattened key/value pairs
       id,
-      ...Object.entries(serialised).flat(),
+      ...[...serialised.entries()].filter(([k]) => k !== 'id').flat(),
     ];
 
     if (!checkWatch) {
@@ -253,22 +283,22 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
   private async getUpdatePatch(
     client: ERedis,
     sId: string,
-    patchSerialised: Record<string, string>,
-  ): Promise<InternalPatch | undefined> {
+    patchSerialised: Serialised<T>,
+  ): Promise<InternalPatch<T> | undefined> {
     await client.watch(this.makeKey(sId));
     const oldSerialised = await this.rawByKeyKeepWatches(
       client,
       sId,
-      this.indices.getCustomIndices().filter((k) => patchSerialised[k]),
+      this.indices.getCustomIndices().filter((k) => patchSerialised.has(k)),
     );
     if (!oldSerialised) {
       return undefined;
     }
-    const newSerialised = { ...patchSerialised };
-    Object.keys(newSerialised).forEach((k) => {
-      if (oldSerialised[k] === newSerialised[k]) {
-        delete newSerialised[k];
-        delete oldSerialised[k];
+    const newSerialised = new Map(patchSerialised);
+    patchSerialised.forEach((n, k) => {
+      if (oldSerialised.get(k) === n) {
+        newSerialised.delete(k);
+        oldSerialised.delete(k);
       }
     });
     return { sId, newSerialised, oldSerialised };
@@ -276,7 +306,7 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
 
   private async runUpdates(
     client: ERedis,
-    patches: InternalPatch[],
+    patches: InternalPatch<T>[],
   ): Promise<void> {
     const argsList = patches
       .map((patch) => this.makeUpdateArgs(patch))
@@ -320,12 +350,12 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
   }
 
   private makeUpdateArgs(
-    { sId, oldSerialised, newSerialised }: InternalPatch,
-  ): [number, any[]] | undefined {
-    const diff = Object.entries(newSerialised).flat();
-    if (!diff.length) {
+    { sId, oldSerialised, newSerialised }: InternalPatch<T>,
+  ): [number, unknown[]] | undefined {
+    if (!newSerialised.size) {
       return undefined; // nothing changed
     }
+    const diff = [...newSerialised.entries()].flat();
     const patchUniqueKeys = makeIndexKeys(this.uniqueKeys, newSerialised);
     const patchNonUniqueKeys = makeIndexKeys(this.nonUniqueKeys, newSerialised);
     const oldUniqueKeys = makeIndexKeys(this.uniqueKeys, oldSerialised);
@@ -351,7 +381,7 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
     return [keyCount, params];
   }
 
-  private async getByKeysKeepWatches<F extends readonly (keyof T & string)[]>(
+  private async getByKeysKeepWatches<F extends readonly (string & keyof T)[]>(
     client: ERedis,
     serialisedIds: string[],
     fields?: F,
@@ -366,41 +396,37 @@ export default class RedisCollection<T extends IDable> extends BaseCollection<T>
       throw new Error('transient error');
     }
     return results
-      .map(([, item]: [unknown, any]) => parseItem(item, fields))
-      .filter(itemHasContent)
-      .map(deserialiseRecord) as T[];
+      .map(([, item]) => parseItem<T>(item, fields))
+      .filter(notUndefined)
+      .map(deserialiseRecord);
   }
 
   private async rawByKeyKeepWatches(
     client: ERedis,
     serialisedId: string,
-    fields?: readonly string[],
-  ): Promise<Record<string, string | null> | undefined> {
+    fields?: readonly (string & keyof T)[],
+  ): Promise<Serialised<T> | undefined> {
     const key = this.makeKey(serialisedId);
-    let item;
-    if (fields) {
-      if (!fields.length) {
-        // just check existence
-        const exists = await client.exists(key);
-        return exists ? {} : undefined;
-      }
-      item = await client.hmget(key, ...fields);
-    } else {
-      item = await client.hgetall(key);
+    if (!fields) {
+      return parseItem((await client.hgetall(key)) as unknown as string[]);
     }
-    const parsed = parseItem(item, fields);
-    return itemHasContent(parsed) ? parsed : undefined;
+    if (!fields.length) {
+      // just check existence
+      const exists = await client.exists(key);
+      return exists ? new Map() : undefined;
+    }
+    return parseItem(await client.hmget(key, ...fields), fields);
   }
 
   private async getAndWatchBySerialisedKey(
     client: ERedis,
-    keyName: keyof T,
+    keyName: string & keyof T,
     serialisedValue: string,
   ): Promise<string[]> {
     if (keyName === 'id') {
       return [serialisedValue];
     }
-    const keyPrefix = this.keyPrefixes[keyName];
+    const keyPrefix = this.keyPrefixes.get(keyName);
     if (!keyPrefix) {
       throw new Error(`Requested key ${keyName} not indexed`);
     }

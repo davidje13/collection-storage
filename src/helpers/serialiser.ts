@@ -6,6 +6,8 @@
 // n = null
 // J = JSON (also accepts any plain JSON value for compatibility)
 
+import { safeAdd } from './safeAccess';
+
 const JSON_INIT_CHARS = '{["0123456789-'; // t/f/n are dedicated values
 const MARK_BINARY = 'b'.charCodeAt(0);
 const MARK_STRING = 's'.charCodeAt(0);
@@ -79,24 +81,31 @@ export function deserialiseValueBin(value: Buffer | string): unknown {
   return deserialiseValue(value.toString('utf8'));
 }
 
-export function serialiseRecord<T>(
-  record: T,
-): Record<string, string> {
-  const result: Record<string, string> = {};
-  Object.keys(record).forEach((k) => {
-    result[k] = serialiseValue((record as any)[k]);
-  });
+export type Serialised<T> = Map<string & keyof T, string>;
+
+export function serialiseRecord<T>(item: T): Serialised<T> {
+  return new Map(Object.entries(item)
+    .map(([k, v]) => [k as string & keyof T, serialiseValue(v)]));
+}
+
+export function deserialiseRecord<T>(serialised: Serialised<T>): T {
+  const result = {} as T;
+  serialised.forEach((v, k) => safeAdd(result, k, deserialiseValue(v)));
   return result;
 }
 
-export function deserialiseRecord(
-  record: Record<string, string | null>,
-): Record<string, unknown> {
-  const result: Record<string, any> = {};
-  Object.keys(record).forEach((k) => {
-    const v = record[k];
-    if (v) {
-      result[k] = deserialiseValue(v);
+export function partialDeserialiseRecord<T, F extends readonly (string & keyof T)[]>(
+  serialised: Serialised<T>,
+  fields?: F,
+): Pick<T, F[-1]> {
+  if (!fields) {
+    return deserialiseRecord(serialised);
+  }
+  const result = {} as T;
+  fields.forEach((k) => {
+    const raw = serialised.get(k);
+    if (raw) {
+      safeAdd(result, k, deserialiseValue(raw));
     }
   });
   return result;

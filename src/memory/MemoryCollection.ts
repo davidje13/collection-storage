@@ -6,6 +6,8 @@ import {
   serialiseValue,
   serialiseRecord,
   deserialiseRecord,
+  Serialised,
+  partialDeserialiseRecord,
 } from '../helpers/serialiser';
 
 function sleep(millis: number): Promise<void> | void {
@@ -17,24 +19,12 @@ function sleep(millis: number): Promise<void> | void {
   return new Promise((resolve): any => setTimeout(resolve, millis));
 }
 
-function applyFilter<T, F extends readonly (keyof T)[]>(
-  data: T,
-  fields?: F,
-): Pick<T, F[-1]> {
-  if (!fields) {
-    return data;
-  }
-  const result: Pick<T, F[-1]> = {} as any;
-  fields.forEach((field) => {
-    result[field] = data[field];
-  });
-  return result;
-}
-
 export default class MemoryCollection<T extends IDable> extends BaseCollection<T> {
-  private readonly data: Map<string, Record<string, string>>;
+  private readonly data = new Map<string, Serialised<T>>();
 
-  private readonly indexData: Partial<Record<keyof T, Map<string, Set<string>>>> = {};
+  private readonly customIndexData: Map<string & keyof T, Map<string, Set<string>>>;
+
+  private readonly uniqueIndexDataPtrs: [string & keyof T, Map<string, Set<string>>][];
 
   public constructor(
     keys: DBKeys<T> = {},
@@ -43,11 +33,11 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
   ) {
     super(keys);
 
-    this.data = new Map();
+    this.customIndexData = new Map(this.indices.getCustomIndices().map((k) => ([k, new Map()])));
 
-    this.indices.getCustomIndices().forEach((k) => {
-      this.indexData[k as keyof T] = new Map();
-    });
+    this.uniqueIndexDataPtrs = this.indices.getUniqueIndices()
+      .filter((k) => (k !== 'id'))
+      .map((k) => ([k, this.customIndexData.get(k)!]));
   }
 
   protected preAct(): Promise<void> | void {
@@ -60,7 +50,7 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
   protected async internalAdd(value: T): Promise<void> {
     const serialised = serialiseRecord(value);
     this.internalCheckDuplicates(serialised, true);
-    this.data.set(serialised.id, serialised);
+    this.data.set(serialised.get('id')!, serialised);
     this.internalPopulateIndices(serialised);
   }
 
@@ -74,7 +64,7 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
     return this.internalAdd({ id, ...update } as T);
   }
 
-  protected async internalUpdate<K extends keyof T & string>(
+  protected async internalUpdate<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
     update: Partial<T>,
@@ -83,7 +73,7 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
 
     const updates = sIds.map((sId) => {
       const oldSerialised = this.data.get(sId)!;
-      const oldValue = deserialiseRecord(oldSerialised) as T;
+      const oldValue = deserialiseRecord(oldSerialised);
       const newValue = { ...oldValue, ...update };
       if (newValue.id !== oldValue.id) {
         throw new Error('Cannot update ID');
@@ -100,14 +90,14 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
       throw e;
     }
     updates.forEach(({ newSerialised }) => {
-      this.data.set(newSerialised.id, newSerialised);
+      this.data.set(newSerialised.get('id')!, newSerialised);
       this.internalPopulateIndices(newSerialised);
     });
   }
 
   protected async internalGetAll<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute?: K,
     searchValue?: T[K],
@@ -119,13 +109,10 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
     } else {
       sIds = [...this.data.keys()];
     }
-    return sIds.map((sId) => applyFilter(
-      deserialiseRecord(this.data.get(sId)!) as T,
-      returnAttributes,
-    ));
+    return sIds.map((sId) => partialDeserialiseRecord(this.data.get(sId)!, returnAttributes));
   }
 
-  protected async internalRemove<K extends keyof T & string>(
+  protected async internalRemove<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<number> {
@@ -139,7 +126,7 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
     return sIds.length;
   }
 
-  private internalGetSerialisedIds<K extends keyof T>(
+  private internalGetSerialisedIds<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
   ): string[] {
@@ -147,7 +134,7 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
     if (searchAttribute === 'id') {
       return this.data.has(sKey) ? [sKey] : [];
     }
-    const index = this.indexData[searchAttribute];
+    const index = this.customIndexData.get(searchAttribute);
     if (!index) {
       throw new Error(`Requested key ${searchAttribute} not indexed`);
     }
@@ -155,44 +142,36 @@ export default class MemoryCollection<T extends IDable> extends BaseCollection<T
     return sIds ? [...sIds] : []; // convert set to array
   }
 
-  private internalCheckDuplicates(
-    serialisedValue: Record<string, string>,
-    checkId: boolean,
-  ): void {
-    if (checkId && this.data.has(serialisedValue.id)) {
+  private internalCheckDuplicates(serialisedValue: Serialised<T>, checkId: boolean): void {
+    if (checkId && this.data.has(serialisedValue.get('id')!)) {
       throw new Error('duplicate');
     }
-    this.indices.getCustomIndices().forEach((key) => {
-      const index = this.indexData[key as keyof T]!;
-      if (this.indices.isUniqueIndex(key) && index.has(serialisedValue[key])) {
+    this.uniqueIndexDataPtrs.forEach(([key, index]) => {
+      if (index.has(serialisedValue.get(key)!)) {
         throw new Error('duplicate');
       }
     });
   }
 
-  private internalPopulateIndices(
-    serialisedValue: Record<string, string>,
-  ): void {
-    this.indices.getCustomIndices().forEach((key) => {
-      const index = this.indexData[key as keyof T]!;
-      const v = serialisedValue[key];
+  private internalPopulateIndices(serialisedValue: Serialised<T>): void {
+    const id = serialisedValue.get('id')!;
+    this.customIndexData.forEach((index, key) => {
+      const v = serialisedValue.get(key)!;
       let o = index.get(v);
       if (!o) {
         o = new Set<string>();
         index.set(v, o);
       }
-      o.add(serialisedValue.id);
+      o.add(id);
     });
   }
 
-  private internalRemoveIndices(
-    serialisedValue: Record<string, string>,
-  ): void {
-    this.indices.getCustomIndices().forEach((key) => {
-      const index = this.indexData[key as keyof T]!;
-      const v = serialisedValue[key];
+  private internalRemoveIndices(serialisedValue: Serialised<T>): void {
+    const id = serialisedValue.get('id')!;
+    this.customIndexData.forEach((index, key) => {
+      const v = serialisedValue.get(key)!;
       const o = index.get(v)!;
-      o.delete(serialisedValue.id);
+      o.delete(id);
       if (!o.size) {
         index.delete(v);
       }

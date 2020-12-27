@@ -5,7 +5,8 @@ import {
   serialiseValue,
   deserialiseValue,
   serialiseRecord,
-  deserialiseRecord,
+  partialDeserialiseRecord,
+  Serialised,
 } from '../helpers/serialiser';
 
 export interface CacheOptions {
@@ -14,42 +15,20 @@ export interface CacheOptions {
   time?: () => number;
 }
 
-interface CacheItem {
-  serialised: Record<string, string> | null;
+interface CacheItem<T> {
+  serialised: Serialised<T> | null;
   partial: boolean;
   time: number;
 }
 
-function appendField<T, K extends string>(
+function appendField<T extends string, K extends string>(
   fields: Readonly<T[]> | undefined,
   extra: K,
-): (T | K)[] | undefined {
-  if (!fields) {
-    return undefined;
+): Readonly<(T | K)[]> | undefined {
+  if (!fields || fields.includes(extra as unknown as T)) {
+    return fields;
   }
   return [...fields, extra];
-}
-
-function filterItem<T, F extends readonly (keyof T & string)[]>(
-  { serialised }: CacheItem,
-  fields?: F,
-): Readonly<Pick<T, F[-1]>> | null {
-  if (!serialised) {
-    return null;
-  }
-  let result: Record<string, any>;
-  if (fields) {
-    result = {};
-    fields.forEach((k) => {
-      const v = serialised[k];
-      if (v) {
-        result[k] = deserialiseValue(v);
-      }
-    });
-  } else {
-    result = deserialiseRecord(serialised);
-  }
-  return result as Readonly<Pick<T, F[-1]>>;
 }
 
 class CachedCollection<T extends IDable> implements Collection<T> {
@@ -57,9 +36,9 @@ class CachedCollection<T extends IDable> implements Collection<T> {
 
   private readonly time: () => number;
 
-  private readonly cache: LruCache<string, CacheItem>;
+  private readonly cache: LruCache<string, CacheItem<T>>;
 
-  private readonly indexData: Partial<Record<keyof T, Map<string, Set<string>>>> = {};
+  private readonly customIndexData: Map<string & keyof T, Map<string, Set<string>>>;
 
   public constructor(
     private readonly baseCollection: Collection<T>,
@@ -72,40 +51,43 @@ class CachedCollection<T extends IDable> implements Collection<T> {
     this.maxAge = maxAge;
     this.time = time;
     this.cache = new LruCache(capacity, this.removeIndices.bind(this));
-    baseCollection.indices.getCustomIndices().forEach((k) => {
-      this.indexData[k as keyof T] = new Map();
-    });
+    this.customIndexData = new Map(baseCollection.indices.getCustomIndices()
+      .map((k) => ([k, new Map()])));
   }
 
   public async add(entry: T): Promise<void> {
     await this.baseCollection.add(entry);
-    this.storeItem(entry, false);
+    this.storeItem(serialiseRecord(entry), false);
   }
 
   public async get<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     key: K,
     value: T[K],
     fields?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
     if (key === 'id') {
-      return filterItem(await this.cachedById(value as T['id'], fields), fields);
+      const cacheItem = await this.cachedById(value as T['id'], fields);
+      if (!cacheItem.serialised) {
+        return null;
+      }
+      return partialDeserialiseRecord(cacheItem.serialised, fields);
     }
     if (this.indices.isUniqueIndex(key)) {
       const keys = this.getKeys(key, value);
       if (keys.length) {
         const cacheItem = await this.cachedById(deserialiseValue(keys[0]) as T['id'], appendField(fields, key));
-        if (cacheItem.serialised && cacheItem.serialised[key] === serialiseValue(value)) {
-          return filterItem(cacheItem, fields);
+        if (cacheItem.serialised && cacheItem.serialised.get(key) === serialiseValue(value)) {
+          return partialDeserialiseRecord(cacheItem.serialised, fields);
         }
       }
     }
 
     const item = await this.baseCollection.get(key, value, appendField(fields, 'id')!);
     if (item) {
-      this.storeItem({ [key]: value, ...item }, Boolean(fields));
+      this.storeItem(serialiseRecord(item).set(key, serialiseValue(value)), Boolean(fields));
     } else {
       this.getKeys(key, value).forEach((k) => this.cache.remove(k));
     }
@@ -113,8 +95,8 @@ class CachedCollection<T extends IDable> implements Collection<T> {
   }
 
   public async getAll<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     key?: K,
     value?: T[NonNullable<K>],
@@ -123,7 +105,7 @@ class CachedCollection<T extends IDable> implements Collection<T> {
     if (!key) {
       const allItems = await this.baseCollection.getAll();
       this.cache.clear();
-      allItems.forEach((item) => this.storeItem(item, false));
+      allItems.forEach((item) => this.storeItem(serialiseRecord(item), false));
       return allItems;
     }
     if (this.indices.isUniqueIndex(key)) {
@@ -142,7 +124,7 @@ class CachedCollection<T extends IDable> implements Collection<T> {
     return items;
   }
 
-  public async update<K extends keyof T & string>(
+  public async update<K extends string & keyof T>(
     key: K,
     value: T[K],
     update: Partial<T>,
@@ -151,20 +133,23 @@ class CachedCollection<T extends IDable> implements Collection<T> {
     await this.baseCollection.update(key, value, update, options);
     const keys = this.getKeys(key, value);
     const serialisedUpdate = serialiseRecord(update);
-    keys.forEach((k) => {
-      const item = this.cache.peek(k)!;
-      if (item.serialised) {
+    keys.forEach((itemKey) => {
+      const item = this.cache.peek(itemKey)!;
+      const { serialised } = item;
+      if (serialised) {
         this.removeIndices(item);
-        Object.assign(item.serialised, serialisedUpdate);
+        serialisedUpdate.forEach((v, k) => {
+          serialised.set(k, v);
+        });
         this.populateIndices(item);
       }
     });
     if (!keys.length && options?.upsert && key === 'id') {
-      this.storeItem({ id: value as T['id'], ...update }, true);
+      this.storeItem(serialiseRecord(update).set('id', serialiseValue(value)), true);
     }
   }
 
-  public async remove<K extends keyof T & string>(
+  public async remove<K extends string & keyof T>(
     key: K,
     value: T[K],
   ): Promise<number> {
@@ -177,77 +162,80 @@ class CachedCollection<T extends IDable> implements Collection<T> {
     return removed;
   }
 
-  public get indices(): Indices {
+  public get indices(): Indices<T> {
     return this.baseCollection.indices;
   }
 
-  private getKeys<K extends keyof T & string>(key: K, value: T[K]): string[] {
+  private getKeys<K extends string & keyof T>(key: K, value: T[K]): string[] {
     const sv = serialiseValue(value);
     if (key === 'id') {
       return [sv];
     }
-    const keys = this.indexData[key]?.get(sv);
+    const keys = this.customIndexData.get(key)?.get(sv);
     return keys ? [...keys] : [];
   }
 
-  private populateIndices({ serialised }: CacheItem): void {
+  private populateIndices({ serialised }: CacheItem<T>): void {
     if (!serialised) {
       return;
     }
 
-    Object.entries(this.indexData).forEach(([attr, idx]) => {
-      if (!Object.prototype.hasOwnProperty.call(serialised, attr)) {
+    const id = serialised.get('id')!;
+    this.customIndexData.forEach((idx, attr) => {
+      const value = serialised.get(attr);
+      if (!value) {
         return;
       }
-      let idxKeys = idx!.get(serialised[attr]);
+      let idxKeys = idx.get(value);
       if (!idxKeys) {
-        idxKeys = new Set([serialised.id]);
-        idx!.set(serialised[attr], idxKeys);
+        idxKeys = new Set([id]);
+        idx.set(value, idxKeys);
       } else if (idxKeys.size && this.indices.isUniqueIndex(attr)) {
         const idxKey = [...idxKeys][0];
-        if (idxKey !== serialised.id) {
+        if (idxKey !== id) {
           this.cache.remove(idxKey);
-          idx!.set(serialised[attr], new Set([serialised.id]));
+          idx.set(value, new Set([id]));
         }
       } else {
-        idxKeys.add(serialised.id);
+        idxKeys.add(id);
       }
     });
   }
 
-  private removeIndices({ serialised }: CacheItem): void {
+  private removeIndices({ serialised }: CacheItem<T>): void {
     if (!serialised) {
       return;
     }
 
-    Object.entries(this.indexData).forEach(([attr, idx]) => {
-      if (!Object.prototype.hasOwnProperty.call(serialised, attr)) {
+    const id = serialised.get('id')!;
+    this.customIndexData.forEach((idx, attr) => {
+      const value = serialised.get(attr);
+      if (!value) {
         return;
       }
-      const idxKeys = idx!.get(serialised[attr])!;
-      idxKeys.delete(serialised.id);
+      const idxKeys = idx.get(value)!;
+      idxKeys.delete(id);
       if (!idxKeys.size) {
-        idx!.delete(serialised[attr]);
+        idx.delete(value);
       }
     });
   }
 
-  private storeItem(item: Readonly<Pick<T, 'id'>>, partial: boolean): void {
-    const serialised = serialiseRecord(item);
+  private storeItem(serialised: Serialised<T>, partial: boolean): void {
     const cacheItem = { serialised, partial, time: this.time() };
     this.populateIndices(cacheItem);
-    this.cache.add(serialised.id, cacheItem);
+    this.cache.add(serialised.get('id')!, cacheItem);
   }
 
-  private cachedById<F extends readonly (keyof T & string)[]>(
+  private cachedById<F extends readonly (string & keyof T)[]>(
     id: T['id'],
     fields?: F,
-  ): Promise<CacheItem> {
+  ): Promise<CacheItem<T>> {
     const key = serialiseValue(id);
     return this.cache.cachedAsync(key, async () => {
       const item = await this.baseCollection.get('id', id, fields!);
       const cacheItem = {
-        serialised: item ? { id: key, ...serialiseRecord(item) } : null,
+        serialised: item ? serialiseRecord(item).set('id', key) : null,
         partial: Boolean(fields),
         time: this.time(),
       };
@@ -256,8 +244,8 @@ class CachedCollection<T extends IDable> implements Collection<T> {
     }, this.isFresh(fields));
   }
 
-  private isFresh(fields?: readonly (keyof T & string)[]): (item: CacheItem) => boolean {
-    return ({ serialised, partial, time }: CacheItem): boolean => {
+  private isFresh(fields?: readonly (string & keyof T)[]): (item: CacheItem<T>) => boolean {
+    return ({ serialised, partial, time }: CacheItem<T>): boolean => {
       if (this.time() > time + this.maxAge) {
         return false;
       }
@@ -267,7 +255,7 @@ class CachedCollection<T extends IDable> implements Collection<T> {
       if (!fields) {
         return false;
       }
-      return fields.every((field) => Object.prototype.hasOwnProperty.call(serialised, field));
+      return fields.every((field) => serialised.has(field));
     };
   }
 }

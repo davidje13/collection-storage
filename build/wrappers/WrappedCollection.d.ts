@@ -16,11 +16,11 @@ export default class WrappedCollection<T extends IDable, WF extends readonly (ke
     private readonly wrapper;
     constructor(baseCollection: Collection<Inner>, fields: WF, wrapper: Wrapper<T, WF[-1], FieldStorage, E>);
     add(entry: T): Promise<void>;
-    get<K extends keyof T & keyof Inner & string, F extends readonly (keyof T & string)[]>(key: K, value: T[K] & Inner[K], fields?: F): Promise<Readonly<Pick<T, F[-1]>> | null>;
-    getAll<K extends keyof T & keyof Inner & string, F extends readonly (keyof T & string)[]>(key?: K, value?: T[K] & Inner[NonNullable<K>], fields?: F): Promise<Readonly<Pick<T, F[-1]>>[]>;
+    get<K extends keyof T & keyof Inner & string, F extends readonly (string & keyof T)[]>(key: K, value: T[K] & Inner[K], fields?: F): Promise<Readonly<Pick<T, F[-1]>> | null>;
+    getAll<K extends keyof T & keyof Inner & string, F extends readonly (string & keyof T)[]>(key?: K, value?: T[K] & Inner[NonNullable<K>], fields?: F): Promise<Readonly<Pick<T, F[-1]>>[]>;
     update<K extends keyof T & keyof Inner & string>(key: K, value: T[K] & Inner[K], update: Partial<T>, options?: UpdateOptions): Promise<void>;
-    remove<K extends keyof T & string>(key: K, value: T[K] & Inner[K]): Promise<number>;
-    get indices(): Indices;
+    remove<K extends string & keyof T>(key: K, value: T[K] & Inner[K]): Promise<number>;
+    get indices(): Indices<T>;
     private wrapAll;
     private unwrapAll;
 }

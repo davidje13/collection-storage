@@ -13,6 +13,9 @@ export default class RedisDb extends BaseDB {
 
   public static async connect(url: string): Promise<RedisDb> {
     const { default: RedisStatic } = await import('ioredis');
+    // The built in reply transformer can only be disabled globally :(
+    // See https://github.com/luin/ioredis/issues/1267
+    RedisStatic.Command.setReplyTransformer('hgetall', (x) => x);
     const connectionPoolSize = 5;
     return new RedisDb(new RedisConnectionPool(
       RedisStatic,

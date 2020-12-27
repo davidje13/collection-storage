@@ -4,7 +4,7 @@ import type { IDable } from '../interfaces/IDable';
 import BaseDB from '../interfaces/BaseDB';
 export default class MemoryDb extends BaseDB {
     constructor({ simulatedLatency }?: {
-        simulatedLatency?: number;
+        simulatedLatency?: number | undefined;
     });
     static connect(url: string): MemoryDb;
     getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): MemoryCollection<T>;

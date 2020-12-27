@@ -16,10 +16,42 @@ interface TestType {
   encrypted: number;
 }
 
+interface SecurityTestType {
+  id: string;
+  __proto__: string;
+  benign: string;
+}
+
 type SerialisedKeyT = Buffer;
 
 describe('encryption', () => {
   const rootKey = crypto.randomBytes(32);
+
+  describe('security', () => {
+    it('handles encrypted malicious attribute names', async () => {
+      const db = await CollectionStorage.connect('memory://');
+      const enc = encryptByKey(rootKey);
+      const col = enc<SecurityTestType>()(['__proto__'], db.getCollection('enc'));
+
+      await col.add(JSON.parse('{"id":"a","__proto__":"foo","benign":"a"}'));
+      const value = await col.get('id', 'a');
+      /* eslint-disable-next-line no-proto */
+      expect(value!.__proto__).toEqual('foo');
+      expect((value as any).length).toBeUndefined();
+    });
+
+    it('handles non-encrypted malicious attribute names', async () => {
+      const db = await CollectionStorage.connect('memory://');
+      const enc = encryptByKey(rootKey);
+      const col = enc<SecurityTestType>()(['benign'], db.getCollection('enc'));
+
+      await col.add(JSON.parse('{"id":"a","__proto__":"foo","benign":"a"}'));
+      const value = await col.get('id', 'a');
+      /* eslint-disable-next-line no-proto */
+      expect(value!.__proto__).toEqual('foo');
+      expect((value as any).length).toBeUndefined();
+    });
+  });
 
   describe('encryptByKey', () => {
     let col: Collection<TestType>;

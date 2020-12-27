@@ -9,6 +9,7 @@ import BaseCollection from '../interfaces/BaseCollection';
 import type { KeyOptions } from '../interfaces/Collection';
 import type { DBKeys } from '../interfaces/DB';
 import type { StateRef } from '../interfaces/BaseDB';
+import { makeKeyValue, mapEntries, safeAdd, safeGet } from '../helpers/safeAccess';
 import retry from '../helpers/retry';
 
 const MONGO_ID = '_id';
@@ -19,6 +20,10 @@ function fieldNameToMongo(name: string): string {
   if (name === ID) {
     return MONGO_ID;
   }
+  if (name === '__proto__') {
+    // mongodb library itself cannot handle __proto__, so we encode the first underscore
+    return '%5F_proto__';
+  }
   return encodeURIComponent(name).replace(DOT_REG, '%2E');
 }
 
@@ -27,6 +32,32 @@ function fieldNameFromMongo(name: string): string {
     return ID;
   }
   return decodeURIComponent(name);
+}
+
+function isBson(v: unknown): v is MBinary {
+  return (
+    Boolean(v) &&
+    typeof v === 'object' &&
+    /* eslint-disable-next-line no-underscore-dangle */
+    Boolean((v as any)._bsontype)
+  );
+}
+
+function valueToMongo(v: unknown): unknown {
+  if (v instanceof Buffer) {
+    return new MBinary(v);
+  }
+  if (isBson(v)) {
+    throw new Error('Must use Buffer to provide binary data');
+  }
+  return v;
+}
+
+function valueFromMongo(v: unknown): unknown {
+  if (isBson(v)) {
+    return v.buffer;
+  }
+  return v;
 }
 
 const MONGO_ERROR_IDX = /^.*? index: ([^ ]+) dup key:.*$/;
@@ -43,18 +74,7 @@ const withUpsertRetry = retry((e) => (
 function convertToMongo<T extends Partial<IDable>>(
   value: T,
 ): Record<string, unknown> {
-  const converted: Record<string, unknown> = {};
-  Object.keys(value).forEach((k) => {
-    let v = (value as any)[k];
-    if (v instanceof Buffer) {
-      v = new MBinary(v);
-      // eslint-disable-next-line no-underscore-dangle
-    } else if (typeof v === 'object' && v._bsontype) {
-      throw new Error('Must use Buffer to provide binary data');
-    }
-    converted[fieldNameToMongo(k)] = v;
-  });
-  return converted;
+  return mapEntries(value, valueToMongo, fieldNameToMongo);
 }
 
 function convertFromMongo<T extends Partial<IDable>>(
@@ -63,27 +83,20 @@ function convertFromMongo<T extends Partial<IDable>>(
   if (!value) {
     return null;
   }
-  const converted: T = {} as any;
-  Object.keys(value).forEach((k) => {
-    let v = (value as any)[k];
-    // eslint-disable-next-line no-underscore-dangle
-    if (typeof v === 'object' && v._bsontype === 'Binary') {
-      v = v.buffer;
-    }
-    (converted as any)[fieldNameFromMongo(k)] = v;
-  });
-  return converted;
+  return mapEntries(value, valueFromMongo, fieldNameFromMongo) as T;
+}
+
+function makeMongoSearch(key: string, value: unknown): Record<string, unknown> {
+  return makeKeyValue(fieldNameToMongo(key), { $eq: valueToMongo(value) });
 }
 
 function makeMongoProjection(
   names?: readonly string[],
-): Record<string, boolean> {
-  const projection: Record<string, boolean> = {};
+): Record<string, number> {
+  const projection: Record<string, number> = {};
   if (names) {
-    projection[MONGO_ID] = false;
-    names.forEach((fieldName) => {
-      projection[fieldNameToMongo(fieldName)] = true;
-    });
+    projection[MONGO_ID] = 0;
+    names.forEach((fieldName) => safeAdd(projection, fieldNameToMongo(fieldName), 1));
   }
   return projection;
 }
@@ -96,9 +109,8 @@ interface MongoIndex {
 
 function makeIndex(keyName: string, options: KeyOptions = {}): IndexSpecification {
   const unique = Boolean(options.unique);
-  const mongoKey = fieldNameToMongo(keyName);
   return {
-    key: { [mongoKey]: unique ? 1 : 'hashed' },
+    key: makeKeyValue(fieldNameToMongo(keyName), unique ? 1 : 'hashed'),
     unique,
   };
 }
@@ -107,13 +119,11 @@ function indicesMatch(a: IndexSpecification, b: IndexSpecification): boolean {
   if (Boolean(a.unique) !== Boolean(b.unique)) {
     return false;
   }
-  const aKey = a.key as Record<string, unknown>;
-  const bKey = b.key as Record<string, unknown>;
-  const keys = Object.keys(aKey);
-  if (Object.keys(bKey).length !== keys.length) {
+  const keys = Object.entries(a.key);
+  if (Object.keys(b.key).length !== keys.length) {
     return false;
   }
-  return keys.every((k) => (aKey[k] === bKey[k]));
+  return keys.every(([k, aVal]) => (aVal === safeGet(b.key, k)));
 }
 
 async function configureCollection(
@@ -125,8 +135,8 @@ async function configureCollection(
   const idxToDelete = new Set(existing.map((idx) => idx.name));
   idxToDelete.delete('_id_'); // MongoDB implicit primary key
 
-  Object.keys(keys)
-    .map((keyName) => makeIndex(keyName, keys[keyName]))
+  Object.entries(keys)
+    .map(([keyName, options]) => makeIndex(keyName, options))
     .forEach((index) => {
       const match = existing.find((idx) => indicesMatch(idx, index));
       if (match) {
@@ -168,51 +178,59 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
     update: Partial<T>,
   ): Promise<void> {
     await withUpsertRetry(() => this.collection.updateOne(
-      convertToMongo({ id }),
+      makeMongoSearch('id', id),
       { $set: convertToMongo(update) },
       { upsert: true },
     ));
   }
 
-  protected async internalUpdate<K extends keyof T & string>(
+  protected async internalUpdate<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
     update: Partial<T>,
   ): Promise<void> {
-    const query = convertToMongo({ [searchAttribute]: searchValue });
+    const query = makeMongoSearch(searchAttribute, searchValue);
     const mongoUpdate = { $set: convertToMongo(update) };
-    if (this.indices.isUniqueIndex(searchAttribute)) {
-      await this.collection.updateOne(query, mongoUpdate);
-    } else {
-      await this.collection.updateMany(query, mongoUpdate);
+    try {
+      if (this.indices.isUniqueIndex(searchAttribute)) {
+        await this.collection.updateOne(query, mongoUpdate);
+      } else {
+        await this.collection.updateMany(query, mongoUpdate);
+      }
+    } catch (e) {
+      if (e.message.includes('would modify the immutable field \'_id\'')) {
+        throw new Error('Cannot update ID');
+      } else {
+        throw e;
+      }
     }
   }
 
   protected async internalGet<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute: K,
     searchValue: T[K],
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
     const raw = await this.collection.findOne(
-      convertToMongo({ [searchAttribute]: searchValue }),
+      makeMongoSearch(searchAttribute, searchValue),
       { projection: makeMongoProjection(returnAttributes) },
     );
     return convertFromMongo<T>(raw);
   }
 
   protected async internalGetAll<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute?: K,
     searchValue?: T[K],
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
     const cursor = this.collection.find(
-      searchAttribute ? convertToMongo({ [searchAttribute]: searchValue }) : {},
+      searchAttribute ? makeMongoSearch(searchAttribute, searchValue) : {},
       { projection: makeMongoProjection(returnAttributes) },
     );
 
@@ -222,12 +240,12 @@ export default class MongoCollection<T extends IDable> extends BaseCollection<T>
     return result;
   }
 
-  protected async internalRemove<K extends keyof T & string>(
+  protected async internalRemove<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<number> {
     const result = await this.collection.deleteMany(
-      convertToMongo({ [searchAttribute]: searchValue }),
+      makeMongoSearch(searchAttribute, searchValue),
     );
     return result.deletedCount || 0;
   }

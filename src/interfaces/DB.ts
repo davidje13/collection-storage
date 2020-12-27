@@ -2,7 +2,7 @@ import type { Collection, KeyOptions } from './Collection';
 import type { IDable } from './IDable';
 
 export type DBKeys<T> = {
-  [K in keyof T & string]?: KeyOptions;
+  [K in string & keyof T]?: KeyOptions;
 };
 
 export interface DB {

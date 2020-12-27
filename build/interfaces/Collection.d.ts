@@ -5,22 +5,22 @@ export interface KeyOptions {
 export interface UpdateOptions {
     upsert?: boolean;
 }
-export interface Indices {
-    getIndices(): string[];
-    getUniqueIndices(): string[];
-    getCustomIndices(): string[];
-    isIndex(attribute: string): boolean;
-    isUniqueIndex(attribute: string): boolean;
+export interface Indices<T> {
+    getIndices(): (string & keyof T)[];
+    getUniqueIndices(): (string & keyof T)[];
+    getCustomIndices(): (string & keyof T)[];
+    isIndex(attribute: string | keyof T): boolean;
+    isUniqueIndex(attribute: string | keyof T): boolean;
 }
 export interface Collection<T extends IDable> {
-    readonly indices: Readonly<Indices>;
+    readonly indices: Readonly<Indices<T>>;
     add(entry: T): Promise<void>;
-    get<K extends keyof T & string>(searchAttribute: K, searchValue: T[K]): Promise<Readonly<T> | null>;
-    get<K extends keyof T & string, F extends readonly (keyof T & string)[]>(searchAttribute: K, searchValue: T[K], returnAttributes: F): Promise<Readonly<Pick<T, F[-1]>> | null>;
+    get<K extends string & keyof T>(searchAttribute: K, searchValue: T[K]): Promise<Readonly<T> | null>;
+    get<K extends string & keyof T, F extends readonly (string & keyof T)[]>(searchAttribute: K, searchValue: T[K], returnAttributes: F): Promise<Readonly<Pick<T, F[-1]>> | null>;
     getAll(): Promise<Readonly<T>[]>;
-    getAll<K extends keyof T & string>(searchAttribute: K, searchValue: T[K]): Promise<Readonly<T>[]>;
-    getAll<K extends keyof T & string, F extends readonly (keyof T & string)[]>(searchAttribute: K, searchValue: T[K], returnAttributes: F): Promise<Readonly<Pick<T, F[-1]>>[]>;
-    update<K extends keyof T & string>(searchAttribute: K, searchValue: T[K], update: Partial<T>, options?: UpdateOptions): Promise<void>;
-    remove<K extends keyof T & string>(searchAttribute: K, searchValue: T[K]): Promise<number>;
+    getAll<K extends string & keyof T>(searchAttribute: K, searchValue: T[K]): Promise<Readonly<T>[]>;
+    getAll<K extends string & keyof T, F extends readonly (string & keyof T)[]>(searchAttribute: K, searchValue: T[K], returnAttributes: F): Promise<Readonly<Pick<T, F[-1]>>[]>;
+    update<K extends string & keyof T>(searchAttribute: K, searchValue: T[K], update: Partial<T>, options?: UpdateOptions): Promise<void>;
+    remove<K extends string & keyof T>(searchAttribute: K, searchValue: T[K]): Promise<number>;
 }
 //# sourceMappingURL=Collection.d.ts.map

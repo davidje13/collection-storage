@@ -94,7 +94,7 @@ export declare class DDB {
     constructor(aws: AWS, host: string, { consistentRead }?: DDBOptions);
     getConsumedUnits(): number;
     getTableNames(): Results<string>;
-    upsertTable(tableName: string, pKeySchema: KeyDefinition[], secondaryIndices: GlobalSecondaryIndexDefinition[], waitForReady: boolean, throughput?: DDBProvisionedThroughput): Promise<boolean>;
+    upsertTable(tableName: string, pKeySchema: KeyDefinition[], secondaryIndices: GlobalSecondaryIndexDefinition[] | undefined, waitForReady: boolean, throughput?: DDBProvisionedThroughput): Promise<boolean>;
     describeTable(tableName: string): Promise<DDBDescribeResponse>;
     waitForTable(tableName: string, waitForIndices: boolean): Promise<void>;
     deleteTable(tableName: string): Promise<void>;

@@ -10,4 +10,8 @@ describe('MongoDb', () => contract({
     await db.close();
   },
   factory: (): Promise<MongoDb> => MongoDb.connect(url),
+
+  // MongoDB client library does not handle fields with dots or named __proto__
+  // See https://github.com/mongodb/js-bson/issues/420
+  testNastyValues: false,
 }));

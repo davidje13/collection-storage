@@ -2,7 +2,7 @@ export default class LruCache<K, V> {
     private readonly capacity;
     private readonly flushFn?;
     private readonly storage;
-    constructor(capacity: number, flushFn?: (value: V) => void);
+    constructor(capacity: number, flushFn?: ((value: V) => void) | undefined);
     cached(key: K, calc: (key: K) => V, fresh?: (value: V) => boolean): V;
     cachedAsync(key: K, calc: (key: K) => Promise<V>, fresh?: (value: V) => boolean): Promise<V>;
     add(key: K, value: V): void;

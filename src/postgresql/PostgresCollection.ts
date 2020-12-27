@@ -3,7 +3,7 @@ import type { IDable } from '../interfaces/IDable';
 import BaseCollection from '../interfaces/BaseCollection';
 import type { DBKeys } from '../interfaces/DB';
 import type { StateRef } from '../interfaces/BaseDB';
-import { serialiseValue, deserialiseValue, serialiseRecord } from '../helpers/serialiser';
+import { serialiseValue, serialiseRecord, partialDeserialiseRecord, Serialised } from '../helpers/serialiser';
 import { encodeHStore, decodeHStore } from './hstore';
 import { withIdentifiers, quoteValue } from './sql';
 
@@ -24,6 +24,7 @@ const STATEMENTS = {
   INSERT: 'INSERT INTO $T (id, data) VALUES ($1, $2::hstore)',
 
   UPDATE: 'UPDATE $T SET data=data||$1::hstore WHERE data->$2=$3 RETURNING id',
+  UPDATE_IF_ID: 'UPDATE $T SET data=data||$1::hstore WHERE data->$2=$3 RETURNING CASE WHEN id<>$4 THEN LENGTH(id)/0 ELSE 1 END',
   UPDATE_ID: 'UPDATE $T SET data=data||$1::hstore WHERE id=$2',
 
   UPSERT_ID: 'INSERT INTO $T (id, data) VALUES ($1, $2::hstore) ON CONFLICT (id) DO UPDATE SET data=$T.data||$2::hstore',
@@ -99,34 +100,15 @@ async function configureTable(
   }
 }
 
-function toHStore(record: Record<string, unknown>): string {
-  return encodeHStore(serialiseRecord(record));
-}
-
-function fromHStore<T>(
-  [id, data]: readonly any[],
-  fields?: readonly string[],
-): T {
-  const rawMap = decodeHStore(data);
-  rawMap.id = id;
-
-  const result: Record<string, unknown> = {};
-
-  if (!fields) {
-    Object.entries(rawMap).forEach(([k, v]) => {
-      result[k] = deserialiseValue(v);
-    });
-    return result as T;
-  }
-
-  fields.forEach((f) => {
-    result[f] = deserialiseValue(rawMap[f]);
-  });
-  return result as T;
+function fromHStore<T, F extends readonly (string & keyof T)[]>(
+  [id, data]: [string, string],
+  fields?: F,
+): Pick<T, F[-1]> {
+  return partialDeserialiseRecord<T, F>(decodeHStore(data).set('id', id) as Serialised<T>, fields);
 }
 
 export default class PostgresCollection<T extends IDable> extends BaseCollection<T> {
-  private readonly cachedQueries: Partial<Record<keyof typeof STATEMENTS, string>> = {};
+  private readonly cachedQueries = new Map<keyof typeof STATEMENTS, string>();
 
   public constructor(
     private readonly pool: PgPoolT,
@@ -139,44 +121,65 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
     this.initAsync(configureTable(pool, tableName, keys));
   }
 
-  protected async internalAdd({ id, ...rest }: T): Promise<void> {
-    await this.runTableQuery('INSERT', serialiseValue(id), toHStore(rest));
+  protected async internalAdd(item: T): Promise<void> {
+    const serialised = serialiseRecord(item);
+    const id = serialised.get('id');
+    serialised.delete('id');
+    await this.runTableQuery('INSERT', id, encodeHStore(serialised));
   }
 
   protected async internalUpsert(
     id: T['id'],
     update: Partial<T>,
   ): Promise<void> {
-    await this.runTableQuery('UPSERT_ID', serialiseValue(id), toHStore(update));
+    await this.runTableQuery(
+      'UPSERT_ID',
+      serialiseValue(id),
+      encodeHStore(serialiseRecord(update)),
+    );
   }
 
-  protected async internalUpdate<K extends keyof T & string>(
+  protected async internalUpdate<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
-    { id, ...rest }: Partial<T>,
+    item: Partial<T>,
   ): Promise<void> {
     const sId = serialiseValue(searchValue);
-    const hstore = toHStore(rest);
+    const serialised = serialiseRecord(item);
+    const id = serialised.get('id');
+    serialised.delete('id');
+    const hstore = encodeHStore(serialised);
 
     if (searchAttribute === 'id') {
       await this.runTableQuery('UPDATE_ID', hstore, sId);
-    } else {
-      const r = await this.runTableQuery('UPDATE', hstore, searchAttribute, sId);
-      if (id !== undefined && r.rowCount > 0 && r.rows[0][0] !== id) {
-        throw new Error('Cannot update ID');
+    } else if (id !== undefined) {
+      try {
+        await this.runTableQuery('UPDATE_IF_ID', hstore, searchAttribute, sId, id);
+      } catch (e) {
+        if (e.message.includes('division by zero')) {
+          // We use /0 to intentionally throw an error in UPDATE_IF_ID to distinguish between
+          // the case of no records found to update, vs. found a record but did not match ID.
+          // Being an error, it causes an automatic rollback of any other changes.
+          // Nothing else can cause a /0 error in this statement.
+          throw new Error('Cannot update ID');
+        } else {
+          throw e;
+        }
       }
+    } else {
+      await this.runTableQuery('UPDATE', hstore, searchAttribute, sId);
     }
   }
 
   protected async internalGet<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute: K,
     searchValue: T[K],
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>> | null> {
-    let raw;
+    let raw: PgQueryArrayResultT<[string, string]>;
     if (searchAttribute === 'id') {
       raw = await this.runTableQuery('SELECT_ID', serialiseValue(searchValue));
     } else {
@@ -185,18 +188,18 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
     if (!raw.rowCount) {
       return null;
     }
-    return fromHStore<T>(raw.rows[0], returnAttributes);
+    return fromHStore<T, F>(raw.rows[0], returnAttributes);
   }
 
   protected async internalGetAll<
-    K extends keyof T & string,
-    F extends readonly (keyof T & string)[]
+    K extends string & keyof T,
+    F extends readonly (string & keyof T)[]
   >(
     searchAttribute?: K,
     searchValue?: T[K],
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[-1]>>[]> {
-    let raw;
+    let raw: PgQueryArrayResultT<[string, string]>;
     if (!searchAttribute) {
       raw = await this.runTableQuery('SELECT_ALL');
     } else if (searchAttribute === 'id') {
@@ -204,14 +207,14 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
     } else {
       raw = await this.runTableQuery('SELECT_ALL_BY', searchAttribute, serialiseValue(searchValue));
     }
-    return raw.rows.map((v) => fromHStore<T>(v, returnAttributes));
+    return raw.rows.map((v) => fromHStore<T, F>(v, returnAttributes));
   }
 
-  protected async internalRemove<K extends keyof T & string>(
+  protected async internalRemove<K extends string & keyof T>(
     searchAttribute: K,
     searchValue: T[K],
   ): Promise<number> {
-    let raw;
+    let raw: PgQueryArrayResultT<[]>;
     if (searchAttribute === 'id') {
       raw = await this.runTableQuery('DELETE_ID', serialiseValue(searchValue));
     } else {
@@ -220,18 +223,18 @@ export default class PostgresCollection<T extends IDable> extends BaseCollection
     return raw.rowCount;
   }
 
-  private runTableQuery(
+  private runTableQuery<R extends any[] = unknown[]>(
     queryName: keyof typeof STATEMENTS,
-    ...values: any[]
-  ): Promise<PgQueryArrayResultT<any[]>> {
+    ...values: unknown[]
+  ): Promise<PgQueryArrayResultT<R>> {
     if (this.stateRef.closed) {
       throw new Error('Connection closed');
     }
 
-    let cached = this.cachedQueries[queryName];
+    let cached = this.cachedQueries.get(queryName);
     if (!cached) {
       cached = withIdentifiers(STATEMENTS[queryName], { T: this.tableName });
-      this.cachedQueries[queryName] = cached;
+      this.cachedQueries.set(queryName, cached);
     }
 
     return this.pool.query({

@@ -2,16 +2,16 @@ export function quoteHValue(v: string): string {
   return `"${v.replace(/(["\\])/g, '\\$1')}"`;
 }
 
-export function encodeHStore(record: Record<string, string>): string {
+export function encodeHStore(record: Map<string, string>): string {
   const result: string[] = [];
-  Object.keys(record).forEach((k) => {
-    result.push(`${quoteHValue(k)}=>${quoteHValue(record[k])}`);
+  record.forEach((v, k) => {
+    result.push(`${quoteHValue(k)}=>${quoteHValue(v)}`);
   });
   return result.join(',');
 }
 
-export function decodeHStore(hstore: string): Record<string, string> {
-  const result: Record<string, string> = {};
+export function decodeHStore(hstore: string): Map<string, string> {
+  const result = new Map<string, string>();
   let current = '';
   let currentKey = '';
   let quote = false;
@@ -46,7 +46,7 @@ export function decodeHStore(hstore: string): Record<string, string> {
         if (quote) {
           current += c;
         } else {
-          result[currentKey] = current;
+          result.set(currentKey, current);
           currentKey = '';
           current = '';
         }
@@ -58,7 +58,7 @@ export function decodeHStore(hstore: string): Record<string, string> {
     p += 1;
   }
   if (currentKey) {
-    result[currentKey] = current;
+    result.set(currentKey, current);
   }
   return result;
 }
