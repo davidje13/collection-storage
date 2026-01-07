@@ -1,5 +1,5 @@
 import { MongoClient, type Db as MDb } from 'mongodb';
-import { type DBKeys, type IDable, BaseDB } from 'collection-storage';
+import { type DBKeys, type IDable, BaseDB } from 'collection-storage/index.mts';
 import { MongoCollection } from './MongoCollection.mts';
 
 function escapeName(name: string): string {

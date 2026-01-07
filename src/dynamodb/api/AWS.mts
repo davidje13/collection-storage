@@ -1,7 +1,7 @@
 import { createHash, createHmac } from 'node:crypto';
 import https from 'node:https';
 import http from 'node:http';
-import { LruCache, retry } from 'collection-storage';
+import { LruCache, retry } from 'collection-storage/index.mts';
 import { PromiseTracker } from '../helpers/PromiseTracker.mts';
 import { AWSError } from './AWSError.mts';
 

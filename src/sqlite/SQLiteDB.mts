@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { type DBKeys, BaseDB, type IDable } from 'collection-storage';
+import { type DBKeys, BaseDB, type IDable } from 'collection-storage/index.mts';
 import { SQLiteCollection } from './SQLiteCollection.mts';
 
 export class SQLiteDB extends BaseDB {

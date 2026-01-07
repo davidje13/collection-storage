@@ -1,4 +1,4 @@
-import { type DBKeys, type IDable, BaseDB } from 'collection-storage';
+import { type DBKeys, type IDable, BaseDB } from 'collection-storage/index.mts';
 import { AWS } from './api/AWS.mts';
 import { DDB, escapeName } from './api/DDB.mts';
 import { DynamoCollection, type Throughput } from './DynamoCollection.mts';

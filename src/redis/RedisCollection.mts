@@ -8,7 +8,7 @@ import {
   deserialiseRecord,
   type Serialised,
   type CollectionOptions,
-} from 'collection-storage';
+} from 'collection-storage/index.mts';
 import type { RedisConnectionPool } from './RedisConnectionPool.mts';
 import { multiExec } from './helpers.mts';
 import type { ERedis } from './scripts.mts';

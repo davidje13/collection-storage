@@ -1,4 +1,4 @@
-import { type DBKeys, BaseDB, type IDable } from 'collection-storage';
+import { type DBKeys, BaseDB, type IDable } from 'collection-storage/index.mts';
 import { Command } from 'ioredis';
 import { RedisCollection } from './RedisCollection.mts';
 import { RedisConnectionPool } from './RedisConnectionPool.mts';

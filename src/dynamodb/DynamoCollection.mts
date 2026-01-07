@@ -7,7 +7,7 @@ import {
   makeKeyValue,
   mapEntries,
   safeGet,
-} from 'collection-storage';
+} from 'collection-storage/index.mts';
 import {
   DDB,
   type DDBItem,

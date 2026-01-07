@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { type DBKeys, BaseDB, type IDable } from 'collection-storage';
+import { type DBKeys, BaseDB, type IDable } from 'collection-storage/index.mts';
 import { PostgresCollection } from './PostgresCollection.mts';
 
 export class PostgresDB extends BaseDB {
