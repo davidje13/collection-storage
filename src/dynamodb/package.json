@@ -1,0 +1,24 @@
+{
+  "name": "@collection-storage/dynamodb",
+  "private": true,
+  "description": "DynamoDB adaptor for collection-storage",
+  "main": "index.mts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davidje13/collection-storage.git"
+  },
+  "keywords": [
+    "nosql",
+    "collection",
+    "persistence",
+    "database",
+    "dynamodb",
+    "dynamo"
+  ],
+  "author": "David Evans",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/davidje13/collection-storage/issues"
+  },
+  "homepage": "https://github.com/davidje13/collection-storage#readme"
+}

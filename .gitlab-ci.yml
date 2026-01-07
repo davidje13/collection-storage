@@ -1,0 +1,44 @@
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH' # do not run pipeline for tags
+
+variables:
+  # Setting a depth of 1 can result in jobs failing if they are not the latest commit when they begin executing.
+  # See https://docs.gitlab.com/ee/ci/runners/configure_runners.html#shallow-cloning
+  GIT_DEPTH: '3'
+
+.build_and_test: &build_and_test
+  services:
+    - name: mongo:8
+      alias: mongo
+    - name: redis:8-alpine
+      alias: redis
+    - name: postgres:18-alpine
+      alias: pg
+      variables:
+        POSTGRES_PASSWORD: password
+    - name: amazon/dynamodb-local:latest
+      alias: ddb
+  variables:
+    MONGO_URL: mongodb://mongo:27017/collection-storage-tests
+    REDIS_URL: redis://redis:6379/15
+    PSQL_URL: postgresql://postgres:password@pg:5432/collection-storage-tests
+    DDB_URL: dynamodb://key:secret@ddb:8000/collection-storage-tests-?tls=false
+  script:
+    - npm install-test
+
+node:20:
+  <<: *build_and_test
+  image: node:20
+
+node:22:
+  <<: *build_and_test
+  image: node:22
+
+node:24:
+  <<: *build_and_test
+  image: node:24
+
+node:25:
+  <<: *build_and_test
+  image: node:25

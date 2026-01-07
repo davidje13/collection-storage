@@ -1,0 +1,24 @@
+{
+  "name": "collection-storage",
+  "private": true,
+  "description": "abstraction layer around communication with a collection-based database",
+  "main": "index.mts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davidje13/collection-storage.git"
+  },
+  "keywords": [
+    "nosql",
+    "collection",
+    "persistence",
+    "database",
+    "memory",
+    "in-memory"
+  ],
+  "author": "David Evans",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/davidje13/collection-storage/issues"
+  },
+  "homepage": "https://github.com/davidje13/collection-storage#readme"
+}

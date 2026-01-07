@@ -1,0 +1,27 @@
+{
+  "name": "@collection-storage/mongodb",
+  "private": true,
+  "description": "MongoDB adaptor for collection-storage",
+  "main": "index.mts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davidje13/collection-storage.git"
+  },
+  "keywords": [
+    "nosql",
+    "collection",
+    "persistence",
+    "database",
+    "mongodb",
+    "mongo"
+  ],
+  "author": "David Evans",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/davidje13/collection-storage/issues"
+  },
+  "homepage": "https://github.com/davidje13/collection-storage#readme",
+  "dependencies": {
+    "mongodb": "6.x"
+  }
+}

@@ -1,19 +1,30 @@
-/* This file is auto-generated;
- * Edit .neutrinorc.js to change configuration.
- */
 {
   "compilerOptions": {
-    "strict": true,
-    "importsNotUsedAsValues": "error",
     "target": "esnext",
     "module": "esnext",
     "moduleResolution": "node",
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
     "noEmit": true,
+
+    "strict": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+
     "isolatedModules": true,
     "esModuleInterop": true,
-    "resolveJsonModule": true
+    "verbatimModuleSyntax": true,
+
+    "stripInternal": true
   },
-  "include": [
-    "src"
-  ]
+  "include": ["src"]
 }

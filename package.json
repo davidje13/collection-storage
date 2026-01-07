@@ -1,61 +1,29 @@
 {
   "name": "collection-storage",
-  "version": "3.1.0",
-  "description": "abstraction layer around communication with a collection-based database",
-  "files": [
-    "build/**/*"
-  ],
-  "main": "build/index.js",
-  "types": "build/index.d.ts",
-  "scripts": {
-    "prebuild": "rewrite-tsconfig",
-    "build": "webpack --mode production",
-    "prelint": "rewrite-tsconfig",
-    "lint": "eslint --format codeframe --report-unused-disable-directives src && tsc",
-    "test": "jest",
-    "posttest": "npm run lint",
-    "test:watch": "jest --watch"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/davidje13/collection-storage.git"
-  },
-  "keywords": [
-    "nosql",
-    "collection",
-    "persistence",
-    "database",
-    "mongo",
-    "redis",
-    "in-memory"
-  ],
+  "version": "4.0.0",
   "author": "David Evans",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/davidje13/collection-storage/issues"
+  "private": true,
+  "scripts": {
+    "build": "scripts/build.sh $npm_package_version",
+    "format": "prettier --write .",
+    "test": "lean-test --parallel-suites src && tsc && prettier --check . && scripts/build.sh $npm_package_version"
   },
-  "homepage": "https://github.com/davidje13/collection-storage#readme",
-  "dependencies": {
-    "@types/ioredis": "4.x",
-    "@types/mongodb": "3.x",
-    "@types/pg": "7.x"
-  },
+  "workspaces": [
+    "src/core",
+    "src/dynamodb",
+    "src/mongodb",
+    "src/postgresql",
+    "src/redis",
+    "src/sqlite"
+  ],
   "devDependencies": {
-    "@neutrinojs/airbnb-base": "9.x",
-    "@neutrinojs/jest": "9.x",
-    "@neutrinojs/library": "9.x",
-    "@types/jest": "26.x",
-    "babel-plugin-transform-dynamic-import": "2.x",
-    "eslint": "7.x",
-    "ioredis": "4.x",
-    "jest": "26.x",
-    "mongodb": "3.x",
-    "neutrino": "9.x",
-    "neutrinojs-typescript": "1.x",
-    "neutrinojs-typescript-eslint": "1.x",
-    "pg": "8.x",
-    "typescript": "4.0.x",
-    "webpack": "4.x",
-    "webpack-cli": "3.x"
+    "@rollup/plugin-terser": "0.4.x",
+    "@rollup/plugin-typescript": "12.x",
+    "lean-test": "2.x",
+    "prettier": "3.7.4",
+    "rollup": "4.x",
+    "rollup-plugin-dts": "6.x",
+    "typescript": "5.9.x"
   }
 }
