@@ -5,9 +5,9 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "build": "scripts/build.sh $npm_package_version",
     "format": "prettier --write .",
-    "test": "lean-test --preprocess tsc --parallel-suites src && tsc && prettier --check . && scripts/build.sh $npm_package_version"
+    "test": "lean-test --preprocess tsc --parallel-suites src && tsc && prettier --check . && scripts/build.sh $npm_package_version",
+    "dopublish": "scripts/build.sh $npm_package_version && echo 'Enter NPM one-time-passcode:' && read otp && npm publish --otp \"$otp\" --access public package-core.tgz && npm publish --otp \"$otp\" --access public package-dynamodb.tgz && npm publish --otp \"$otp\" --access public package-mongodb.tgz && npm publish --otp \"$otp\" --access public package-postgresql.tgz && npm publish --otp \"$otp\" --access public package-redis.tgz && npm publish --otp \"$otp\" --access public package-sqlite.tgz"
   },
   "workspaces": [
     "src/core",
