@@ -40,4 +40,4 @@ jobs:
           MONGO_URL: mongodb://mongo:27017/collection-storage-tests
           REDIS_URL: redis://redis:6379/15
           PSQL_URL: postgresql://postgres:password@pg:5432/collection-storage-tests
-          DDB_URL: dynamodb://key:secret@ddb:8000/collection-storage-tests-?tls=false
+          DDB_URL: dynamodb://key:secret@ddb:8000/collection-storage-tests-?tls=false&consistentRead=true

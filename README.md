@@ -9,13 +9,15 @@ For user documentation, see the [Core README](./src/core/README.md).
 ## Contributing
 
 To run the test suite, you will need to have a local installation of MongoDB,
-Redis, PostgreSQL and DynamoDB Local. By default, the tests will connect to
-`mongodb://localhost:27017/collection-storage-tests`,
-`redis://localhost:6379/15`,
-`postgresql://postgres:password@localhost:5432/collection-storage-tests`, and
-`dynamodb://key:secret@localhost:8000/collection-storage-tests-?tls=false`. You
-can change this if required by setting the `MONGO_URL`, `REDIS_URL`, `PSQL_URL`,
-and `DDB_URL` environment variables.
+Redis, PostgreSQL and DynamoDB Local, and configure environment variables to
+reference them. The defaults are:
+
+```
+MONGO_URL=mongodb://localhost:27017/collection-storage-tests
+REDIS_URL=redis://localhost:6379/15
+PSQL_URL=postgresql://postgres:password@localhost:5432/collection-storage-tests
+DDB_URL=dynamodb://key:secret@localhost:8000/collection-storage-tests-?tls=false&consistentRead=true
+```
 
 **warning**: By default, this will flush any Redis database at index 15. If you
 have used database 15 for your own data, you should set `REDIS_URL` to use a
@@ -24,6 +26,9 @@ different database index.
 **note**: The PostgreSQL tests will connect to the given server's `postgres`
 database to drop (if necessary) and re-create the specified test database. You
 do not need to create the test database yourself.
+
+**note**: For the tests, you must set the `consistentRead` flag on the DynamoDB
+connection, otherwise the consumed capacity will not match the expected values.
 
 The target databases can be started using Docker if not installed locally:
 
