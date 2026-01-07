@@ -218,7 +218,7 @@ export class DynamoCollection<T extends IDable> extends BaseCollection<T> {
   /** @internal */ private readonly _tableName: string;
   /** @internal */ private readonly _uniqueKeys: (string & keyof T)[] = [];
 
-  constructor(
+  /** @internal */ constructor(
     options: CollectionOptions<T>,
     ddb: DDB,
     tableName: string,

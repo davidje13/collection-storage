@@ -14,7 +14,7 @@ export class RedisConnectionPool {
   /** @internal */ private _closingFn?: () => void;
   /** @internal */ private _closed = false;
 
-  constructor(url: string, options: RedisOptions, maxConnections: number) {
+  /** @internal */ constructor(url: string, options: RedisOptions, maxConnections: number) {
     this._url = url;
     this._options = options;
     this._maxConnections = maxConnections;

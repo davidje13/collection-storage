@@ -19,7 +19,7 @@ export class SQLiteCollection<T extends IDable> extends BaseCollection<T> {
     StatementSync
   >();
 
-  constructor(options: CollectionOptions<T>, db: DatabaseSync) {
+  /** @internal */ constructor(options: CollectionOptions<T>, db: DatabaseSync) {
     super(options);
     this._db = db;
     this._tableName = options.name;

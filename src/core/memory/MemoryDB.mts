@@ -22,7 +22,7 @@ export class MemoryDB extends BaseDB {
   /** @internal */ private readonly _backingData: DBBackingData;
   /** @internal */ private readonly _simulatedLatency: number;
 
-  /** @internal */ private constructor(backingData: DBBackingData, simulatedLatency: number) {
+  private constructor(backingData: DBBackingData, simulatedLatency: number) {
     super();
     this._backingData = backingData;
     this._simulatedLatency = simulatedLatency;

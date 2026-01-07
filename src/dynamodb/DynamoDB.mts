@@ -42,12 +42,7 @@ export class DynamoDB extends BaseDB {
   /** @internal */ private readonly _tableNamePrefix: string;
   /** @internal */ private readonly _throughputFn: DbThroughputFn | undefined;
 
-  /** @internal */ private constructor(
-    aws: AWS,
-    ddb: DDB,
-    tableNamePrefix: string,
-    throughputFn?: DbThroughputFn,
-  ) {
+  private constructor(aws: AWS, ddb: DDB, tableNamePrefix: string, throughputFn?: DbThroughputFn) {
     super();
     this._aws = aws;
     this._ddb = ddb;

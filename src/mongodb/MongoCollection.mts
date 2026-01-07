@@ -143,7 +143,7 @@ async function configureCollection(collection: MCollection, keys: DBKeys<any> = 
 export class MongoCollection<T extends IDable> extends BaseCollection<T> {
   /** @internal */ private readonly _collection: MCollection;
 
-  constructor(options: CollectionOptions<T>, collection: MCollection) {
+  /** @internal */ constructor(options: CollectionOptions<T>, collection: MCollection) {
     super(options);
     this._collection = collection;
     this.initAsync(configureCollection(collection, options.keys));

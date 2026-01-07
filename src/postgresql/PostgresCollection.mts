@@ -17,7 +17,7 @@ export class PostgresCollection<T extends IDable> extends BaseCollection<T> {
   /** @internal */ private readonly _tableName: string;
   /** @internal */ private readonly _cachedQueries = new Map<keyof typeof STATEMENTS, string>();
 
-  constructor(options: CollectionOptions<T>, pool: PgPoolT) {
+  /** @internal */ constructor(options: CollectionOptions<T>, pool: PgPoolT) {
     super(options);
     this._pool = pool;
     this._tableName = options.name;

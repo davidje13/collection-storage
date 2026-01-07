@@ -5,7 +5,7 @@ import { PostgresCollection } from './PostgresCollection.mts';
 export class PostgresDB extends BaseDB {
   /** @internal */ private readonly _pool: Pool;
 
-  /** @internal */ private constructor(pool: Pool) {
+  private constructor(pool: Pool) {
     super();
     this._pool = pool;
   }

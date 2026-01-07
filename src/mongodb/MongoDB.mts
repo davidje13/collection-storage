@@ -9,7 +9,7 @@ function escapeName(name: string): string {
 export class MongoDB extends BaseDB {
   /** @internal */ private readonly _client: MongoClient;
 
-  /** @internal */ private constructor(client: MongoClient) {
+  private constructor(client: MongoClient) {
     super();
     this._client = client;
   }

@@ -6,7 +6,7 @@ export class SQLiteDB extends BaseDB {
   /** @internal */ private readonly _db: DatabaseSync;
   /** @internal */ private readonly _pathname: string | null;
 
-  /** @internal */ private constructor(db: DatabaseSync, pathname: string | null) {
+  private constructor(db: DatabaseSync, pathname: string | null) {
     super();
     this._db = db;
     this._pathname = pathname;

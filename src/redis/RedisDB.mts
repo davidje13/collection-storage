@@ -6,7 +6,7 @@ import { RedisConnectionPool } from './RedisConnectionPool.mts';
 export class RedisDB extends BaseDB {
   /** @internal */ private readonly _pool: RedisConnectionPool;
 
-  /** @internal */ private constructor(pool: RedisConnectionPool) {
+  private constructor(pool: RedisConnectionPool) {
     super();
     this._pool = pool;
   }
