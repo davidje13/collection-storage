@@ -532,7 +532,11 @@ export class DDB {
     });
   }
 
-  getAllItems(tableName: string, requestedAttrs?: readonly string[] | undefined): Results<DDBItem> {
+  getAllItems(
+    tableName: string,
+    requestedAttrs?: readonly string[] | undefined,
+    limitOne?: boolean,
+  ): Results<DDBItem> {
     // https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html
     const query = {
       TableName: tableName,
@@ -541,6 +545,7 @@ export class DDB {
       }),
       ConsistentRead: this._consistentRead,
       ReturnConsumedCapacity: 'TOTAL',
+      Limit: limitOne ? 1 : undefined,
     };
     return new Paged(this._aws, async (lastKey) => {
       const response: DDBScanResponse = await this._call('Scan', {

@@ -177,7 +177,10 @@ export const contract = <T extends DB>({
   });
 
   describe('get', () => {
-    const col = withCollection(db, { idx: {} }, [{ id: '1', idx: 2, a: 'A1', b: 'B1' }]);
+    const col = withCollection(db, { idx: {} }, [
+      { id: '1', idx: 2, a: 'A1', b: 'B1' },
+      { id: '2', idx: 3, a: 'A2', b: 'B2' },
+    ]);
 
     it('returns only the requested attributes', async ({ getTyped }) => {
       const v = await getTyped(col).where('id', '1').attrs(['idx', 'b']).get();
@@ -208,8 +211,13 @@ export const contract = <T extends DB>({
     });
 
     it('returns null if no values match', async ({ getTyped }) => {
-      const v = await getTyped(col).where('idx', 3).get();
+      const v = await getTyped(col).where('idx', 4).get();
       expect(v).toEqual(null);
+    });
+
+    it('returns any value if no filter is specified', async ({ getTyped }) => {
+      const v = await getTyped(col).all().get();
+      expect(['1', '2']).contains(v?.id);
     });
   });
 

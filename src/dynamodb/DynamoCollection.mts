@@ -340,8 +340,8 @@ export class DynamoCollection<T extends IDable> extends BaseCollection<T> {
     returnAttributes?: F,
   ): Promise<Readonly<Pick<T, F[number]>> | null> {
     if (!filterAttribute) {
-      const items = await this._ddb.getAllItems(this._tableName, returnAttributes).all(); // TODO: avoid loading all items in memory
-      for (const item of items) {
+      const item = await this._ddb.getAllItems(this._tableName, returnAttributes, true).first();
+      if (item) {
         return fromDynamoItem(item) as Pick<T, F[number]>;
       }
       return null;

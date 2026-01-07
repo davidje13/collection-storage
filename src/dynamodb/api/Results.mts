@@ -4,6 +4,8 @@ export interface Results<I> {
   batched(consumer: (items: Readonly<I[]>) => Promise<void> | void): Promise<void> | void;
 
   all(): Promise<Readonly<I[]>> | Readonly<I[]>;
+
+  first(): Promise<I | undefined>;
 }
 
 export class Paged<K, I> implements Results<I> {
@@ -42,5 +44,12 @@ export class Paged<K, I> implements Results<I> {
       items.push(...i);
     });
     return items;
+  }
+
+  first(): Promise<I | undefined> {
+    return this._aws.do(async () => {
+      const [pageItems] = await this._fn(undefined);
+      return pageItems[0];
+    });
   }
 }
