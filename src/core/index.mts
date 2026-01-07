@@ -1,7 +1,7 @@
 import { CollectionStorage } from './CollectionStorage.mts';
 import { MemoryDB } from './memory/MemoryDB.mts';
 
-export { CollectionStorage, CollectionStorageFactory } from './CollectionStorage.mts';
+export { CollectionStorageFactory } from './CollectionStorage.mts';
 export type { IDable } from './interfaces/IDable.mts';
 export type { DB, DBKeys } from './interfaces/DB.mts';
 export { BaseDB } from './interfaces/BaseDB.mts';
@@ -40,3 +40,5 @@ export {
 } from './helpers/serialiser.mts';
 
 CollectionStorage.register(['memory'], MemoryDB.connect);
+
+export { CollectionStorage, MemoryDB };

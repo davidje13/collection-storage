@@ -30,7 +30,11 @@ export class MemoryCollection<T extends IDable> extends BaseCollection<T> {
   /** @internal */ private readonly _backing: CollectionBackingData<T>;
   /** @internal */ private readonly _simulatedLatency: number;
 
-  constructor(options: CollectionOptions<T>, dbBackingData: DBBackingData, simulatedLatency = 0) {
+  /** @internal */ constructor(
+    options: CollectionOptions<T>,
+    dbBackingData: DBBackingData,
+    simulatedLatency = 0,
+  ) {
     super(options);
     let backingData = dbBackingData.get(options.name);
     if (!backingData) {

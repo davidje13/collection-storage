@@ -5,17 +5,20 @@ export class CollectionStorageFactory {
     string,
     (url: string) => DB | Promise<DB>
   >();
-  /** @internal */ private readonly _loaders = new Map<string, () => Promise<void>>();
+  /** @internal */ private readonly _loaders = new Map<string, () => Promise<unknown>>();
 
   register(protocols: string[], builder: (url: string) => DB | Promise<DB>) {
     for (const protocol of protocols) {
       this._protocols.set(protocol, builder);
+      this._loaders.delete(protocol);
     }
   }
 
-  dynamic(...services: [string, () => Promise<void>][]) {
+  dynamic(services: [string, () => Promise<unknown>][]) {
     for (const [protocol, loader] of services) {
-      this._loaders.set(protocol, loader);
+      if (!this._protocols.has(protocol)) {
+        this._loaders.set(protocol, loader);
+      }
     }
   }
 
