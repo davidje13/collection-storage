@@ -4,7 +4,8 @@ Provides an abstraction layer around communication with a collection-based
 database. This makes switching database choices easier during deployments and
 testing.
 
-For user documentation, see the [Core README](./src/core/README.md).
+For user documentation, see the [Core README](./src/core/README.md) and the
+[API documentation](./docs/API.md).
 
 ## Contributing
 
