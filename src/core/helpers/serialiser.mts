@@ -99,7 +99,13 @@ export function serialiseRecord<T extends object>(item: T): Serialised<T> {
 }
 
 export function deserialiseRecord<T extends object>(serialised: Serialised<T>): T {
-  return Object.fromEntries(serialised.entries().map(([k, v]) => [k, deserialiseValue(v)])) as T;
+  // Node.js 22+ supports serialised.entries().map(([k, v]) => [k, deserialiseValue(v)])
+  // But we still support Node.js 20 for now
+  const mapped: [string, unknown][] = [];
+  for (const [k, v] of serialised.entries()) {
+    mapped.push([k, deserialiseValue(v)]);
+  }
+  return Object.fromEntries(mapped) as T;
 }
 
 export function partialDeserialiseRecord<T extends object, F extends readonly (string & keyof T)[]>(
