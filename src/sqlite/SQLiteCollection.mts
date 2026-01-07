@@ -8,7 +8,7 @@ import {
   type CollectionOptions,
   partialDeserialiseRecord,
   type Serialised,
-} from 'collection-storage/index.mts';
+} from '../core/index.mts';
 import { withIdentifiers } from './sql.mts';
 
 export class SQLiteCollection<T extends IDable> extends BaseCollection<T> {

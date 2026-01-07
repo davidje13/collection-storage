@@ -22,27 +22,22 @@ const TERSER_OPTS = {
 
 const EXTERNAL = [
   /node:.*/,
-  'collection-storage/index.mts', // Once Node 20 is dropped, this can change to collection-storage
+  /^.*\/core\/index\.mts$/, // Once Node 20 is dropped, this can change to 'collection-storage'
   'mongodb',
   'pg',
   'ioredis',
 ];
 
-// these are only needed for Node 20 support - once dropped, the imports can
-// be re-written as collection-storage and this mapping and warning suppression can be removed
+// this is only needed for Node 20 support - once dropped, the imports can
+// be re-written as collection-storage and this mapping can be removed
 const PATHS = (p) =>
-  p === 'collection-storage/index.mts' ? 'collection-storage' : p;
-const SUPPRESS_ABSOLUTE_MTS = (warning, warn) => {
-  if (warning.plugin !== 'typescript' || warning.pluginCode !== 'TS2877') {
-    warn(warning);
-  }
-};
+  /^.*\/core\/index\.mts$/.test(p) ? 'collection-storage' : p;
 
 export default [
   ...MODULES.map((m) => ({
     input: `./src/${m}/index.mts`,
     output: { file: `build/${m}/index.mjs`, format: 'esm', paths: PATHS },
-    onwarn: SUPPRESS_ABSOLUTE_MTS,
+    makeAbsoluteExternalsRelative: false, // TODO: remove once Node 20 is dropped
     external: EXTERNAL,
     plugins: [
       typescript({
@@ -62,6 +57,7 @@ export default [
   ...MODULES.map((m) => ({
     input: `./build/${m}/types/src/${m}/index.d.mts`,
     output: { file: `build/${m}/index.d.mts`, format: 'esm', paths: PATHS },
+    makeAbsoluteExternalsRelative: false, // TODO: remove once Node 20 is dropped
     external: EXTERNAL,
     plugins: [dts()],
   })),

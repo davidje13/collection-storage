@@ -15,7 +15,7 @@ import {
   safeGet,
   retry,
   type CollectionOptions,
-} from 'collection-storage/index.mts';
+} from '../core/index.mts';
 
 const MONGO_ID = '_id';
 const ID = 'id';

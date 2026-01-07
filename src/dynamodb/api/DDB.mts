@@ -1,4 +1,4 @@
-import { retry, makeKeyValue, safeSet, safeGet } from 'collection-storage/index.mts';
+import { retry, makeKeyValue, safeSet, safeGet } from '../../core/index.mts';
 import type { AWS } from './AWS.mts';
 import { type Results, Paged } from './Results.mts';
 import { AWSError } from './AWSError.mts';

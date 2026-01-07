@@ -1,5 +1,5 @@
 import { Redis, type RedisOptions } from 'ioredis';
-import { retry } from 'collection-storage/index.mts';
+import { retry } from '../core/index.mts';
 import { defineAllScripts, type ERedis } from './scripts.mts';
 
 const withRetry = retry((e) => e instanceof Error && e.message === 'transient error');

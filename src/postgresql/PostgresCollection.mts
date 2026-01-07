@@ -8,7 +8,7 @@ import {
   partialDeserialiseRecord,
   type Serialised,
   type CollectionOptions,
-} from 'collection-storage/index.mts';
+} from '../core/index.mts';
 import { encodeHStore, decodeHStore } from './hstore.mts';
 import { withIdentifiers } from './sql.mts';
 
