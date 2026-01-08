@@ -289,29 +289,36 @@ an `id` and any other fields you wish to save.
 
 #### `collection.all()`
 
+[`collection.all`]: #collectionall
+
 ```js
 const filtered = collection.all();
 ```
 
-Filters for all records in the collection (see [Filter](#filter) below).
+Filters for all records in the collection (see [`Filter`]).
 
 #### `collection.where(attribute, value)`
+
+[`collection.where`]: #collectionwhereattribute-value
 
 ```js
 const filtered = collection.where(attribute, value);
 ```
 
 Filters for records with `attribute` equal to `value` in the collection (see
-[Filter](#filter) below).
+[`Filter`]).
 
 The `attribute` can be any indexed attribute (including `id`).
 
 ### Filter
 
-Filters are returned by [`collection.all`](#collectionall) and
-[`collection.where`](#collectionwhereattribute-value).
+[`Filter`]: #filter
+
+Filters are returned by [`collection.all`] and [`collection.where`].
 
 #### `filtered.get()`
+
+[`filtered.get`]: #filteredget
 
 ```js
 const record = await filtered.get();
@@ -322,13 +329,37 @@ Returns one (arbitrary) record matching the filter. If no records match, returns
 
 #### `filtered.values()`
 
+[`filtered.values`]: #filteredvalues
+
 ```js
 for await (const record of filtered.values()) {
 }
 ```
 
-Like [`filtered.get`](#filteredget), but returns an async generator of all
-matching records (if any).
+Like [`filtered.get`], but returns an [`AsyncGenerator`] of all matching records
+(if any).
+
+Note that some database connectors perform cleanup (such as releasing a
+connection back to the pool) when the generator completes. If you do not consume
+the generator to completion, ensure you call [`iterator.return()`] on it to
+trigger this behaviour (the `for await` syntax handles this for you if an error
+is thrown, `break` is used, or the function returns, so the example usage above
+is always safe. You only need to worry about calling `.return()` if you are
+manually calling `.next()`, or if you discard the generator before passing it to
+a `for await` loop).
+
+For situations where you do not immediately pass the generator to `for await` or
+a helper (such as [`Array.fromAsync`]), you should use a `try...finally` block:
+
+```js
+const recordGenerator = filtered.values();
+try {
+  // do complicated things with recordGenerator
+  // (remember to await calls to ensure the finally block does not run prematurely)
+} finally {
+  await recordGenerator.return();
+}
+```
 
 #### `filtered.count()`
 
@@ -381,8 +412,7 @@ const projected = filtered.attrs(attributes);
 Limits the attributes which will be returned from this query. Only those named
 in `attributes` will be included.
 
-The returned object supports [`.get`](#filteredget) and
-[`.values`](#filteredvalues).
+The returned object supports [`filtered.get`] and [`filtered.values`].
 
 Example usage:
 
@@ -700,3 +730,10 @@ To ensure best compatibility, do not use null bytes in any strings.
 This library is designed to work with untrusted input; you do not need to
 perform any data sanitising. Note that collection and index names, though
 technically safe to set to any value, should not be set from untrusted data.
+
+[`AsyncGenerator`]:
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncGenerator
+[`iterator.return()`]:
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Iteration_protocols#returnvalue_2
+[`Array.fromAsync`]:
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/fromAsync
