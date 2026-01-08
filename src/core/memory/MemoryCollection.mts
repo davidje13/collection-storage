@@ -20,8 +20,8 @@ function sleep(millis: number): Promise<void> | void {
 
 interface CollectionBackingData<T> {
   readonly _data: Map<string, Serialised<T>>;
-  readonly _customIndexData: Map<string & keyof T, Map<string, Set<string>>>;
-  readonly _uniqueIndexDataPtrs: [string & keyof T, Map<string, Set<string>>][];
+  readonly _customIndexData: Map<string & keyof T, Map<string | undefined, Set<string>>>;
+  readonly _uniqueIndexDataPtrs: [string & keyof T, Map<string | undefined, Set<string>>][];
 }
 
 export type DBBackingData = Map<string, CollectionBackingData<any>>;
@@ -48,6 +48,60 @@ export class MemoryCollection<T extends IDable> extends BaseCollection<T> {
           .map((k) => [k, customIndexData.get(k)!]),
       };
       dbBackingData.set(options.name, backingData);
+    } else {
+      // migrate existing indices
+      const indices = backingData._customIndexData;
+      const newIndices = new Set<string>(this.indices.getCustomIndices());
+      for (const [attr] of indices) {
+        if (!this.indices.isIndex(attr)) {
+          indices.delete(attr);
+        } else {
+          newIndices.delete(attr);
+        }
+      }
+      for (const attr of newIndices) {
+        const index = new Map<string, Set<string>>();
+        for (const sRecord of backingData._data.values()) {
+          const v = sRecord.get(attr);
+          if (v === undefined) {
+            continue;
+          }
+          let o = index.get(v);
+          if (!o) {
+            o = new Set<string>();
+            index.set(v, o);
+          }
+          o.add(sRecord.get('id')!);
+        }
+        indices.set(attr, index);
+      }
+
+      // migrate existing uniqueness constraints
+      const uniqueIndices = backingData._uniqueIndexDataPtrs;
+      const newUniqueIndices = new Set<string>(this.indices.getUniqueIndices());
+      newUniqueIndices.delete('id');
+      let del = 0;
+      for (let i = 0; i < uniqueIndices.length; ++i) {
+        const attr = uniqueIndices[i]![0];
+        if (!this.indices.isUniqueIndex(attr)) {
+          ++del;
+        } else {
+          newUniqueIndices.delete(attr);
+          if (del) {
+            uniqueIndices[i - del] = uniqueIndices[i]!;
+          }
+        }
+      }
+      uniqueIndices.length -= del;
+      for (const attr of newUniqueIndices) {
+        const index = indices.get(attr)!;
+        for (const records of index.values()) {
+          if (records.size > 1) {
+            throw new Error('duplicate');
+          }
+        }
+        uniqueIndices.push([attr, index]);
+      }
     }
     this._backing = backingData;
     this._simulatedLatency = simulatedLatency;
@@ -180,7 +234,7 @@ export class MemoryCollection<T extends IDable> extends BaseCollection<T> {
   /** @internal */ private _populateIndices(serialisedValue: Serialised<T>): void {
     const id = serialisedValue.get('id')!;
     this._backing._customIndexData.forEach((index, key) => {
-      const v = serialisedValue.get(key)!;
+      const v = serialisedValue.get(key);
       let o = index.get(v);
       if (!o) {
         o = new Set<string>();
@@ -193,7 +247,7 @@ export class MemoryCollection<T extends IDable> extends BaseCollection<T> {
   /** @internal */ private _removeIndices(serialisedValue: Serialised<T>): void {
     const id = serialisedValue.get('id')!;
     this._backing._customIndexData.forEach((index, key) => {
-      const v = serialisedValue.get(key)!;
+      const v = serialisedValue.get(key);
       const o = index.get(v)!;
       o.delete(id);
       if (!o.size) {

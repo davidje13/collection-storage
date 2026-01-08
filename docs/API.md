@@ -75,13 +75,17 @@ change the unindexed attributes, and both versions can co-exist (see
 [migrate](#migrated) below for details on enabling automatic migrations on a
 per-record basis).
 
-The MongoDB, PostgreSQL, and SQLite databases support changing indices in any
-way at a later point. In a later deploy, you can simply create your collection
-with different indices, and the necessary changes will happen automatically.
-DynamoDB indices will also be updated automatically but note that this may take
-some time and will use up capacity on the indices. Redis does not currently
-support changing or removing existing indices, and will not index existing data
-if a new index is added.
+Indices can be changed in any way on subsequent runs. Simply create your
+collection with different indices, and the necessary changes will happen
+automatically. Note that some database connectors have limited support for this:
+
+- The Redis connector does not currently support adding, changing, or removing
+  indices. Any added indices will be applied to new records, but the existing
+  records will not be indexed. Removed indices will stop being updated and
+  enforced, but their backing data will remain in the database.
+- The DynamoDB connector supports all index changes, but it may take some time
+  to reindex and will consume capacity as it scans through all existing records
+  in the collection.
 
 ## Encryption
 

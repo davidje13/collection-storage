@@ -19,13 +19,19 @@ const globalDbs = getGlobal(
 );
 
 export class MemoryDB extends BaseDB {
+  /** @internal */ private readonly _name: string;
   /** @internal */ private readonly _backingData: DBBackingData;
   /** @internal */ private readonly _simulatedLatency: number;
 
-  private constructor(backingData: DBBackingData, simulatedLatency: number) {
+  private constructor(name: string, backingData: DBBackingData, simulatedLatency: number) {
     super();
+    this._name = name;
     this._backingData = backingData;
     this._simulatedLatency = simulatedLatency;
+  }
+
+  public get databaseName() {
+    return this._name;
   }
 
   static connect(url: string): MemoryDB {
@@ -40,7 +46,7 @@ export class MemoryDB extends BaseDB {
     }
     const params = parsedUrl.searchParams;
     const simulatedLatency = Number(params.get('simulatedLatency'));
-    return new MemoryDB(backingData, Number.isNaN(simulatedLatency) ? 0 : simulatedLatency);
+    return new MemoryDB(name, backingData, Number.isNaN(simulatedLatency) ? 0 : simulatedLatency);
   }
 
   getCollection<T extends IDable>(name: string, keys?: DBKeys<T>): MemoryCollection<T> {

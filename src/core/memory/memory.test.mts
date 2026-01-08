@@ -3,9 +3,14 @@ import { contract } from '../../test-helpers/db.contract-test.mts';
 import 'lean-test';
 
 describe('MemoryDB', () => {
+  let unique = 0;
+
   contract({
-    factory: () => MemoryDB.connect('memory://'),
-    testMigration: false,
+    factory: (persist) => {
+      const id = persist ? `db-${unique++}` : '';
+      return MemoryDB.connect(`memory://${id}`);
+    },
+    migrationFactory: (existing) => MemoryDB.connect(`memory://${existing.databaseName}`),
   });
 
   it('shares data between databases with the same name', { timeout: 5000 }, async () => {
@@ -56,8 +61,14 @@ describe('MemoryDB', () => {
 });
 
 describe('MemoryDB with simulated latency', () => {
+  let unique = 0;
+
   contract({
-    factory: () => MemoryDB.connect('memory://?simulatedLatency=20'),
-    testMigration: false,
+    factory: (persist) => {
+      const id = persist ? `db-latency-${unique++}` : '';
+      return MemoryDB.connect(`memory://${id}?simulatedLatency=20`);
+    },
+    migrationFactory: (existing) =>
+      MemoryDB.connect(`memory://${existing.databaseName}?simulatedLatency=20`),
   });
 });
