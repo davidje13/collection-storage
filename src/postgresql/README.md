@@ -35,4 +35,4 @@ postgresql://[username:password@]host[:port]/database[?options]
 Options can include `ssl=true`, `sslcert=<cert-file-path>`,
 `sslkey=<key-file-path>`, `sslrootcert=<root-file-path>`. For other options, see
 the config keys in the
-[pg Client constructor documentation](https://node-postgres.com/api/client/#constructor).
+[pg-connection-string documentation](https://www.npmjs.com/package/pg-connection-string#tcp-connections).

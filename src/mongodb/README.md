@@ -23,13 +23,15 @@ import { CollectionStorage } from 'collection-storage';
 
 CollectionStorage.dynamic([
   ['mongodb', () => import('@collection-storage/mongodb')],
+  ['mongodb+srv', () => import('@collection-storage/mongodb')],
 ]);
 ```
 
 ## Connection String
 
 ```
-mongodb://[username:password@]host1[:port1][,...hostN[:portN]]][/[database][?options]]
+mongodb://[username:password@]host1[:port1][,...hostN[:portN]][/[database][?options]]
+mongodb+srv://[username:password@]host[:port][/[database][?options]]
 ```
 
 See the
