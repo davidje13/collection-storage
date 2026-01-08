@@ -1,4 +1,10 @@
-import { fromAsync, withCollection, withDB } from '../../test-helpers/db.contract-test.mts';
+import {
+  contract,
+  fromAsync,
+  withCollection,
+  withDB,
+} from '../../test-helpers/db.contract-test.mts';
+import { makeWrappedDB } from '../../test-helpers/makeWrappedDB.mts';
 import type { Collection } from '../interfaces/Collection.mts';
 import { MemoryDB } from '../memory/MemoryDB.mts';
 import { cache } from './cached.mts';
@@ -371,5 +377,15 @@ describe('cache', () => {
       expect(await getTyped(col).where('id', 'i3').get()).toBeNull();
       expect(await getTyped(col).where('id', 'i4').get()).not(toBeNull());
     });
+  });
+});
+
+describe('cache integration', () => {
+  contract({
+    factory: () =>
+      makeWrappedDB(MemoryDB.connect('memory://'), (base) =>
+        cache(base, { capacity: 10, maxAge: 5000 }),
+      ),
+    testMigration: false,
   });
 });

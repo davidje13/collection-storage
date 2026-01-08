@@ -94,7 +94,7 @@ export abstract class BaseCollection<T extends IDable> implements Collection<T> 
           !c.indices.isUniqueIndex(filterAttribute) &&
           Object.keys(delta).some((k) => c.indices.isUniqueIndex(k))
         ) {
-          throw new Error('duplicate');
+          throw new Error('Updating multiple records will create duplicates');
         }
         await c._innerPreAct();
         return c.internalUpdate(filterAttribute, filterValue, delta, options);

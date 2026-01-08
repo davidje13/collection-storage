@@ -461,7 +461,7 @@ export class RedisCollection<T extends IDable> extends BaseCollection<T> {
     }
     const keyPrefix = this._keyPrefixes.get(attribute);
     if (!keyPrefix) {
-      throw new Error(`Requested key ${attribute} not indexed`);
+      throw new Error(`Requested attribute ${attribute} not indexed`);
     }
     const keyAddress = `${keyPrefix}:${sValue}`;
     await client.watch(keyAddress);

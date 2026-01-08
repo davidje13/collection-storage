@@ -86,7 +86,7 @@ export class RedisConnectionPool {
 
   /** @internal */ private async _getConnection(): Promise<ERedis> {
     if (this._closed) {
-      throw new Error('Connection _closed');
+      throw new Error('Connection closed');
     }
 
     const r = this._connections.pop();

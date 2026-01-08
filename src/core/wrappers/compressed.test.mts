@@ -1,4 +1,10 @@
-import { fromAsync, withCollection, withDB } from '../../test-helpers/db.contract-test.mts';
+import {
+  contract,
+  fromAsync,
+  withCollection,
+  withDB,
+} from '../../test-helpers/db.contract-test.mts';
+import { makeWrappedDB } from '../../test-helpers/makeWrappedDB.mts';
 import type { Collection } from '../interfaces/Collection.mts';
 import { MemoryDB } from '../memory/MemoryDB.mts';
 import { compress, type Compressed } from './compressed.mts';
@@ -106,5 +112,13 @@ describe('compression', () => {
   it('allows getting all values', { timeout: 5000 }, async ({ getTyped }) => {
     const value = await fromAsync(getTyped(col).all().values());
     expect(value[0]?.compressed).toEqual('hello world');
+  });
+});
+
+describe('compressed integration', () => {
+  contract({
+    factory: () =>
+      makeWrappedDB(MemoryDB.connect('memory://'), (base) => compress(['value'], base)),
+    testMigration: false,
   });
 });

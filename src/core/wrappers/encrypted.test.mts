@@ -1,6 +1,13 @@
 import crypto from 'node:crypto';
-import { fromAsync, withCollection, withDB } from '../../test-helpers/db.contract-test.mts';
+import {
+  contract,
+  fromAsync,
+  withCollection,
+  withDB,
+} from '../../test-helpers/db.contract-test.mts';
+import { makeWrappedDB } from '../../test-helpers/makeWrappedDB.mts';
 import type { Collection } from '../interfaces/Collection.mts';
+import type { IDable } from '../interfaces/IDable.mts';
 import { MemoryDB } from '../memory/MemoryDB.mts';
 import {
   encryptByKey,
@@ -224,7 +231,7 @@ describe('encryption', () => {
       await getTyped(keyCol).where('id', 'a').remove();
 
       await expect(() => getTyped(col).where('id', 'a').get()).throws(
-        hasProperty('message', 'No encryption key found for record'),
+        hasProperty('message', matches(/No encryption key found in .* for record "a"/)),
       );
     });
 
@@ -401,7 +408,7 @@ describe('encryption', () => {
         await getTyped(backingCol).add({ ...item!, id: 'b', unencUnique: 5 });
 
         await expect(() => getTyped(col).where('id', 'b').attrs(['id', 'encrypted']).get()).throws(
-          'No encryption key found for record',
+          'No encryption key found',
         );
       },
     );
@@ -529,5 +536,17 @@ describe('encryption', () => {
       const value = await fromAsync(getTyped(col).all().values());
       expect(value[0]?.encrypted).toEqual(9);
     });
+  });
+});
+
+describe('encrypted integration', () => {
+  const enc = encryptByKey(crypto.randomBytes(32));
+
+  contract({
+    factory: () =>
+      makeWrappedDB(MemoryDB.connect('memory://'), (base) =>
+        enc<IDable & Record<string, unknown>>()(['value'], base),
+      ),
+    testMigration: false,
   });
 });

@@ -80,12 +80,12 @@ function encryptByKey<KeyT, SerialisedKeyT>(
     ) =>
       new WrappedCollection<T, F, Buffer, never>(baseCollection, attributes, {
         wrap: (_, v): Promise<Buffer> | Buffer => encryption.encrypt(key, serialiseValueBin(v)),
-        unwrap: async (_, v): Promise<any> => {
+        unwrap: async (attr, v): Promise<any> => {
           if (!(v instanceof Buffer)) {
             if (allowRaw) {
               return v; // probably an old record before encryption was added
             }
-            throw new Error('unencrypted data');
+            throw new Error(`unencrypted data in ${baseCollection.name}.${attr}`);
           }
           return deserialiseValueBin(await encryption.decrypt(key, v));
         },
@@ -139,7 +139,9 @@ function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
       return rawKeyCache.cached(item.key, () => encryption.deserialiseKey(item.key));
     }
     if (!generateIfNeeded) {
-      throw new Error('No encryption key found for record');
+      throw new Error(
+        `No encryption key found in ${keyCollection.name} for record ${JSON.stringify(id)}`,
+      );
     }
     const key = await encryption.generateKey();
     const serialisedKey = encryption.serialiseKey(key);
@@ -161,12 +163,12 @@ function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
       new WrappedCollection<T, F, Buffer, KeyT>(baseCollection, attributes, {
         wrap: (_, v, key): Promise<Buffer> | Buffer =>
           encryption.encrypt(key, serialiseValueBin(v)),
-        unwrap: async (_, v, key): Promise<any> => {
+        unwrap: async (attr, v, key): Promise<any> => {
           if (!(v instanceof Buffer)) {
             if (allowRaw) {
               return v; // probably an old record before encryption was added
             }
-            throw new Error('unencrypted data');
+            throw new Error(`unencrypted data in ${baseCollection.name}.${attr}`);
           }
           return deserialiseValueBin(await encryption.decrypt(key, v));
         },

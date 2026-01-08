@@ -147,60 +147,62 @@ class CachedCollection<T extends IDable> implements Collection<T> {
     filterValue: T[K],
   ): Filtered<T> {
     const self = this;
+    const get = async () => {
+      const sId = this._filterOne(filterAttribute, filterValue);
+      if (sId !== null) {
+        const cached = await this._cachedById(deserialiseValue(sId) as T['id']);
+        if (cached.serialised?.get(filterAttribute) === serialiseValue(filterValue)) {
+          return deserialiseRecord(cached.serialised);
+        }
+      }
+      const record = await baseFilter.get();
+      if (record) {
+        this._store(
+          serialiseRecord(record).set(filterAttribute, serialiseValue(filterValue)),
+          false,
+        );
+      } else {
+        this._clearCacheMatching(filterAttribute, filterValue);
+      }
+      return record;
+    };
     return {
       ...this._by(baseFilter, filterAttribute, filterValue),
 
-      async get() {
-        const sId = self._filterOne(filterAttribute, filterValue);
-        if (sId !== null) {
-          const cached = await self._cachedById(deserialiseValue(sId) as T['id']);
-          if (cached.serialised?.get(filterAttribute) === serialiseValue(filterValue)) {
-            return deserialiseRecord(cached.serialised);
-          }
-        }
-        const record = await baseFilter.get();
-        if (record) {
-          self._store(
-            serialiseRecord(record).set(filterAttribute, serialiseValue(filterValue)),
-            false,
-          );
-        } else {
-          self._clearCacheMatching(filterAttribute, filterValue);
-        }
-        return record;
-      },
+      get,
       async *values() {
-        const record = await this.get();
+        const record = await get();
         if (record !== null) {
           yield record;
         }
       },
       attrs<F extends readonly (string & keyof T)[]>(attributes: F) {
+        const get = async () => {
+          const sId = self._filterOne(filterAttribute, filterValue);
+          if (sId !== null) {
+            const cached = await self._cachedById(
+              deserialiseValue(sId) as T['id'],
+              appendAttr(attributes, filterAttribute),
+            );
+            if (cached.serialised?.get(filterAttribute) === serialiseValue(filterValue)) {
+              return partialDeserialiseRecord(cached.serialised, attributes);
+            }
+          }
+          const record = await baseFilter.attrs(appendAttr(attributes, 'id')).get();
+          if (record) {
+            self._store(
+              serialiseRecord(record).set(filterAttribute, serialiseValue(filterValue)),
+              true,
+            );
+          } else {
+            self._clearCacheMatching(filterAttribute, filterValue);
+          }
+          return record;
+        };
         return {
-          async get() {
-            const sId = self._filterOne(filterAttribute, filterValue);
-            if (sId !== null) {
-              const cached = await self._cachedById(
-                deserialiseValue(sId) as T['id'],
-                appendAttr(attributes, filterAttribute),
-              );
-              if (cached.serialised?.get(filterAttribute) === serialiseValue(filterValue)) {
-                return partialDeserialiseRecord(cached.serialised, attributes);
-              }
-            }
-            const record = await baseFilter.attrs(appendAttr(attributes, 'id')).get();
-            if (record) {
-              self._store(
-                serialiseRecord(record).set(filterAttribute, serialiseValue(filterValue)),
-                true,
-              );
-            } else {
-              self._clearCacheMatching(filterAttribute, filterValue);
-            }
-            return record;
-          },
+          get,
           async *values() {
-            const record = await this.get();
+            const record = await get();
             if (record !== null) {
               yield record;
             }
@@ -257,7 +259,10 @@ class CachedCollection<T extends IDable> implements Collection<T> {
       async update(delta: Partial<T>, options?: UpdateOptions) {
         await baseFilter.update(delta, options);
         const sDelta = serialiseRecord(delta);
-        for (const sId of self._filter(filterAttribute, filterValue)) {
+        // must make a copy of the matching set because we will repopulate the indices,
+        // which would lead to an infinite loop if we continue working from a live list
+        const matching = [...self._filter(filterAttribute, filterValue)];
+        for (const sId of matching) {
           const item = self._cache.peek(sId);
           const serialised = item?.serialised;
           if (serialised) {
@@ -407,10 +412,9 @@ class CachedCollection<T extends IDable> implements Collection<T> {
       if (!sValue) {
         return;
       }
-      let idxSIds = idx.get(sValue);
+      const idxSIds = idx.get(sValue);
       if (!idxSIds) {
-        idxSIds = new Set([sId]);
-        idx.set(sValue, idxSIds);
+        idx.set(sValue, new Set([sId]));
       } else if (idxSIds.size && this.indices.isUniqueIndex(attr)) {
         const idxSId = idxSIds.keys().next().value!;
         if (idxSId !== sId) {

@@ -193,7 +193,7 @@ async function configureTable(
         for (const attr of attrs) {
           const value = safeGet(item, attr);
           if (!value) {
-            throw new Error(`Unable to migrate existing data (no value for ${attr})`);
+            throw new Error(`Unable to migrate existing data (no value for ${tableName}.${attr})`);
           }
           indexItems.push({ ix: toDynamoKey(attr, value), id: item['id']! });
         }

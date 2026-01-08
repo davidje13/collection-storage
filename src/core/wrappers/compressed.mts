@@ -35,6 +35,8 @@ async function compressValue(
 }
 
 async function decompressValue(
+  collectionName: string,
+  attr: string,
   v: Buffer,
   { allowRaw = true, allowRawBuffer = false }: CompressOptions,
 ): Promise<any> {
@@ -42,7 +44,7 @@ async function decompressValue(
     if (allowRaw) {
       return v; // probably an old record before compression was added
     }
-    throw new Error('unknown compression type');
+    throw new Error(`unknown compression type for ${collectionName}.${attr}`);
   }
   if (v[0] === 0x1f && v[1] === 0x8b) {
     // gzip "magic number"
@@ -54,7 +56,7 @@ async function decompressValue(
   if (allowRaw && allowRawBuffer) {
     return v;
   }
-  throw new Error('unknown compression type');
+  throw new Error(`unknown compression format for ${collectionName}.${attr}`);
 }
 
 export function compress<T extends IDable, F extends CompressableKeys<T>>(
@@ -64,6 +66,6 @@ export function compress<T extends IDable, F extends CompressableKeys<T>>(
 ): Collection<T> {
   return new WrappedCollection<T, F, Buffer, never>(baseCollection, attributes, {
     wrap: (_, v): Promise<Buffer> => compressValue(v, options),
-    unwrap: (_, v): Promise<any> => decompressValue(v, options),
+    unwrap: (attr, v): Promise<any> => decompressValue(baseCollection.name, attr, v, options),
   });
 }

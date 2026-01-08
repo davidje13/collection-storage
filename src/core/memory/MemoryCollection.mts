@@ -97,7 +97,7 @@ export class MemoryCollection<T extends IDable> extends BaseCollection<T> {
         const index = indices.get(attr)!;
         for (const records of index.values()) {
           if (records.size > 1) {
-            throw new Error('duplicate');
+            throw new Error(`Existing records contain duplicate ${this.name}.${attr}`);
           }
         }
         uniqueIndices.push([attr, index]);
@@ -222,11 +222,11 @@ export class MemoryCollection<T extends IDable> extends BaseCollection<T> {
     checkId: boolean,
   ): void {
     if (checkId && this._backing._data.has(serialisedValue.get('id')!)) {
-      throw new Error('duplicate');
+      throw new Error(`duplicate ${this.name}.id`);
     }
-    for (const [key, index] of this._backing._uniqueIndexDataPtrs) {
-      if (index.has(serialisedValue.get(key)!)) {
-        throw new Error('duplicate');
+    for (const [attr, index] of this._backing._uniqueIndexDataPtrs) {
+      if (index.has(serialisedValue.get(attr)!)) {
+        throw new Error(`duplicate ${this.name}.${attr}`);
       }
     }
   }

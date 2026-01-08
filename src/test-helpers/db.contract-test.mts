@@ -60,6 +60,32 @@ export const contract = <T extends DB>({
     expect(retrieved).not(toBe(stored));
   });
 
+  it('stores and retrieves numeric data', async ({ getTyped }) => {
+    const stored = { id: '1', value: 1 };
+    const col = getTyped(db).getCollection<typeof stored>(getUniqueName());
+
+    await col.add(stored);
+
+    const retrieved = await col.where('id', stored.id).get();
+
+    expect(retrieved!.value).toEqual(stored.value);
+    expect(retrieved).not(toBe(stored));
+  });
+
+  it('stores and retrieves null, true, false', async ({ getTyped }) => {
+    const stored = { id: '1', v1: null, v2: true, v3: false };
+    const col = getTyped(db).getCollection<typeof stored>(getUniqueName());
+
+    await col.add(stored);
+
+    const retrieved = await col.where('id', stored.id).get();
+
+    expect(retrieved!.v1).isNull();
+    expect(retrieved!.v2).isTrue();
+    expect(retrieved!.v3).isFalse();
+    expect(retrieved).not(toBe(stored));
+  });
+
   it('stores and retrieves binary data', async ({ getTyped }) => {
     const stored = { id: '1', value: Buffer.from('hello', 'utf8') };
     const col = getTyped(db).getCollection<typeof stored>(getUniqueName());
@@ -68,6 +94,7 @@ export const contract = <T extends DB>({
 
     const retrieved = await col.where('id', stored.id).get();
 
+    expect(retrieved!.value).toBeInstanceOf(Buffer);
     expect([...retrieved!.value]).toEqual([...stored.value]);
     expect(retrieved).not(toBe(stored));
   });
@@ -96,13 +123,13 @@ export const contract = <T extends DB>({
 
   it('survives immediate database closure', async ({ getTyped }) => {
     // create a complex collection which will often need database setup at construction time:
-    const col = getTyped(db).getCollection<{ id: string; idx: number; value: string }>(
+    const col = getTyped(db).getCollection<{ id: string; idx: number; uidx: string }>(
       getUniqueName(),
-      { idx: {}, value: { unique: true } },
+      { idx: {}, uidx: { unique: true } },
     );
     await getTyped(db).close(); // close before database setup has completed
 
-    await expect(() => col.add({ id: '1', idx: 4, value: 'foo' })).throws('Connection closed');
+    await expect(() => col.add({ id: '1', idx: 4, uidx: 'foo' })).throws('Connection closed');
   });
 
   it('duplicate close() calls resolve immediately', async ({ getTyped }) => {
@@ -140,8 +167,8 @@ export const contract = <T extends DB>({
     getTyped,
   }) => {
     const name = getUniqueName();
-    const keys1 = { idx: { unique: true }, value: { unique: true } };
-    const keys2 = { value: { unique: true }, idx: { unique: true } }; // same keys, different order
+    const keys1 = { idx: { unique: true }, uidx: { unique: true } };
+    const keys2 = { uidx: { unique: true }, idx: { unique: true } }; // same keys, different order
     const col1 = getTyped(db).getCollection<TestType>(name, keys1);
     const col2 = getTyped(db).getCollection<TestType>(name, keys2);
 
@@ -169,17 +196,17 @@ export const contract = <T extends DB>({
   });
 
   describe('where', () => {
-    const col = withCollection(db, { idx: {} }, [{ id: '1', idx: 2, a: 'A1', b: 'B1' }]);
+    const col = withCollection(db, { idx: {} }, [{ id: '1', idx: 2, other: 'B1' }]);
 
     it('rejects filters using unindexed keys', ({ getTyped }) => {
-      expect(() => getTyped(col).where('b', 'B1')).throws('No index');
+      expect(() => getTyped(col).where('other', 'B1')).throws('No index');
     });
   });
 
   describe('get', () => {
     const col = withCollection(db, { idx: {} }, [
-      { id: '1', idx: 2, a: 'A1', b: 'B1' },
-      { id: '2', idx: 3, a: 'A2', b: 'B2' },
+      { id: '1', idx: 2, value: 'A1', b: 'B1' },
+      { id: '2', idx: 3, value: 'A2', b: 'B2' },
     ]);
 
     it('returns only the requested attributes', async ({ getTyped }) => {
@@ -202,7 +229,7 @@ export const contract = <T extends DB>({
 
     it('returns all attributes by default', async ({ getTyped }) => {
       const v = await getTyped(col).where('id', '1').get();
-      expect(v).toEqual({ id: '1', idx: 2, a: 'A1', b: 'B1' });
+      expect(v).toEqual({ id: '1', idx: 2, value: 'A1', b: 'B1' });
     });
 
     it('allows filters using any indexed attribute', async ({ getTyped }) => {
@@ -223,7 +250,7 @@ export const contract = <T extends DB>({
 
   describe('get unique', () => {
     const col = withCollection(db, { idx: { unique: true } }, [
-      { id: '1', idx: 2, a: 'A1', b: 'B1' },
+      { id: '1', idx: 2, value: 'A1', b: 'B1' },
     ]);
 
     it('returns only the requested attributes', async ({ getTyped }) => {
@@ -238,16 +265,16 @@ export const contract = <T extends DB>({
 
     it('returns all attributes by default', async ({ getTyped }) => {
       const v = await getTyped(col).where('idx', 2).get();
-      expect(v).toEqual({ id: '1', idx: 2, a: 'A1', b: 'B1' });
+      expect(v).toEqual({ id: '1', idx: 2, value: 'A1', b: 'B1' });
     });
   });
 
   describe('get data types', () => {
     it('allows querying by JSON data', async ({ getTyped }) => {
       const value = { nested: ['hi', { object: 3 }] };
-      const stored = { id: '1', value };
+      const stored = { id: '1', json: value };
       const col = getTyped(db).getCollection<typeof stored>(getUniqueName(), {
-        value: {},
+        json: {},
       });
 
       await col.add(stored);
@@ -255,15 +282,15 @@ export const contract = <T extends DB>({
       const sameValue = { ...value };
       const otherValue = { nested: ['nah', { object: 3 }] };
 
-      expect((await col.where('value', sameValue).get())!.id).toEqual('1');
-      expect(await col.where('value', otherValue).get()).toBeNull();
+      expect((await col.where('json', sameValue).get())!.id).toEqual('1');
+      expect(await col.where('json', otherValue).get()).toBeNull();
     });
 
     it('allows querying by binary data', async ({ getTyped }) => {
       const value = Buffer.from('hello', 'utf8');
-      const stored = { id: '1', value };
+      const stored = { id: '1', bin: value };
       const col = getTyped(db).getCollection<typeof stored>(getUniqueName(), {
-        value: {},
+        bin: {},
       });
 
       await col.add(stored);
@@ -271,16 +298,16 @@ export const contract = <T extends DB>({
       const sameValue = Buffer.from(value);
       const otherValue = Buffer.from('nah', 'utf8');
 
-      expect((await col.where('value', sameValue).get())!.id).toEqual('1');
-      expect(await col.where('value', otherValue).get()).toBeNull();
+      expect((await col.where('bin', sameValue).get())!.id).toEqual('1');
+      expect(await col.where('bin', otherValue).get()).toBeNull();
     });
   });
 
   describe('values', () => {
     const col = withCollection(db, { idx: {} }, [
-      { id: '1', idx: 1, a: 'A1', b: 'B1' },
-      { id: '2', idx: 2, a: 'A2', b: 'B2' },
-      { id: '3', idx: 2, a: 'A3', b: 'B3' },
+      { id: '1', idx: 1, value: 'A1', b: 'B1' },
+      { id: '2', idx: 2, value: 'A2', b: 'B2' },
+      { id: '3', idx: 2, value: 'A3', b: 'B3' },
     ]);
 
     it('returns only the requested attributes', async ({ getTyped }) => {
@@ -290,15 +317,15 @@ export const contract = <T extends DB>({
 
     it('returns all attributes by default', async ({ getTyped }) => {
       const v = await fromAsync(getTyped(col).where('id', '1').values());
-      expect(v).toEqual([{ id: '1', idx: 1, a: 'A1', b: 'B1' }]);
+      expect(v).toEqual([{ id: '1', idx: 1, value: 'A1', b: 'B1' }]);
     });
 
     it('allows filters using any indexed attribute', async ({ getTyped }) => {
       const v = await fromAsync(getTyped(col).where('idx', 2).values());
       expect(new Set(v)).toEqual(
         new Set([
-          { id: '2', idx: 2, a: 'A2', b: 'B2' },
-          { id: '3', idx: 2, a: 'A3', b: 'B3' },
+          { id: '2', idx: 2, value: 'A2', b: 'B2' },
+          { id: '3', idx: 2, value: 'A3', b: 'B3' },
         ]),
       );
     });
@@ -316,9 +343,9 @@ export const contract = <T extends DB>({
 
   describe('count', () => {
     const col = withCollection(db, { idx: {} }, [
-      { id: '1', idx: 1, a: 'A1', b: 'B1' },
-      { id: '2', idx: 2, a: 'A2', b: 'B2' },
-      { id: '3', idx: 2, a: 'A3', b: 'B3' },
+      { id: '1', idx: 1, value: 'A1', b: 'B1' },
+      { id: '2', idx: 2, value: 'A2', b: 'B2' },
+      { id: '3', idx: 2, value: 'A3', b: 'B3' },
     ]);
 
     it('allows filters using any indexed attribute', async ({ getTyped }) => {
@@ -335,10 +362,10 @@ export const contract = <T extends DB>({
   });
 
   describe('update', () => {
-    const col = withCollection(db, { idxs: {}, a: { unique: true } }, [
-      { id: '1', idxs: '1', a: 'A1', b: 'B1' },
-      { id: '2', idxs: '2', a: 'A2', b: 'B2' },
-      { id: '3', idxs: '2', a: 'A3', b: 'B3' },
+    const col = withCollection(db, { idxs: {}, uidx: { unique: true } }, [
+      { id: '1', idxs: '1', uidx: 'A1', b: 'B1' },
+      { id: '2', idxs: '2', uidx: 'A2', b: 'B2' },
+      { id: '3', idxs: '2', uidx: 'A3', b: 'B3' },
     ]);
 
     it('changes only matching entries', async ({ getTyped }) => {
@@ -354,26 +381,26 @@ export const contract = <T extends DB>({
     });
 
     it('rejects and rolls-back changes which cause duplicates', async ({ getTyped }) => {
-      await expect(() => getTyped(col).where('id', '2').update({ a: 'A1' })).throws('duplicate');
+      await expect(() => getTyped(col).where('id', '2').update({ uidx: 'A1' })).throws('duplicate');
 
       const v = await getTyped(col).where('id', '2').get();
-      expect(v!.a).toEqual('A2');
+      expect(v!.uidx).toEqual('A2');
     });
 
     it('allows setting unique columns to the same value', async ({ getTyped }) => {
-      await getTyped(col).where('id', '2').update({ a: 'A2', b: 'updated' });
+      await getTyped(col).where('id', '2').update({ uidx: 'A2', b: 'updated' });
 
       const v = await getTyped(col).where('id', '2').get();
-      expect(v!.a).toEqual('A2');
+      expect(v!.uidx).toEqual('A2');
       expect(v!.b).toEqual('updated');
     });
 
     it('allows setting unique columns to historic values', async ({ getTyped }) => {
-      await getTyped(col).where('id', '3').update({ a: 'A3b' });
-      await getTyped(col).where('id', '2').update({ a: 'A3' });
+      await getTyped(col).where('id', '3').update({ uidx: 'A3b' });
+      await getTyped(col).where('id', '2').update({ uidx: 'A3' });
 
       const v = await getTyped(col).where('id', '2').get();
-      expect(v!.a).toEqual('A3');
+      expect(v!.uidx).toEqual('A3');
     });
 
     it('rejects attempts to change the ID', async ({ getTyped }) => {
@@ -393,7 +420,7 @@ export const contract = <T extends DB>({
     });
 
     it('allows setting ID to the same value via another property', async ({ getTyped }) => {
-      await getTyped(col).where('a', 'A2').update({ id: '2', b: 'updated' });
+      await getTyped(col).where('uidx', 'A2').update({ id: '2', b: 'updated' });
 
       const v = await getTyped(col).where('id', '2').get();
       expect(v!.b).toEqual('updated');
@@ -402,7 +429,7 @@ export const contract = <T extends DB>({
     it('rejects attempts to change the ID via another property and rolls back', async ({
       getTyped,
     }) => {
-      await expect(() => getTyped(col).where('a', 'A2').update({ id: '4', b: 'new' })).throws(
+      await expect(() => getTyped(col).where('uidx', 'A2').update({ id: '4', b: 'new' })).throws(
         'Cannot update ID',
       );
 
@@ -422,21 +449,21 @@ export const contract = <T extends DB>({
     });
 
     it('rejects conflicts from changing multiple records', async ({ getTyped }) => {
-      await expect(() => getTyped(col).where('idxs', '2').update({ a: 'multi' })).throws(
+      await expect(() => getTyped(col).where('idxs', '2').update({ uidx: 'multi' })).throws(
         'duplicate',
       );
       const [v2, v3] = await Promise.all([
         getTyped(col).where('id', '2').get(),
         getTyped(col).where('id', '3').get(),
       ]);
-      expect(v2!.a).toEqual('A2');
-      expect(v3!.a).toEqual('A3');
+      expect(v2!.uidx).toEqual('A2');
+      expect(v3!.uidx).toEqual('A3');
     });
 
     it('leaves unspecified properties unchanged', async ({ getTyped }) => {
       await getTyped(col).where('id', '2').update({ b: 'updated' });
       const v = await getTyped(col).where('id', '2').get();
-      expect(v!.a).toEqual('A2');
+      expect(v!.uidx).toEqual('A2');
     });
 
     it('does nothing if no value matches', async ({ getTyped }) => {
@@ -471,25 +498,25 @@ export const contract = <T extends DB>({
         await getTyped(col).where('id', '2').update({ b: 'updated' }, { upsert: true });
 
         const v = await getTyped(col).where('id', '2').get();
-        expect(v!.a).toEqual('A2');
+        expect(v!.uidx).toEqual('A2');
       });
 
       it('adds a new record if no value matches using key ID', async ({ getTyped }) => {
-        const data = { idxs: 'x', a: 'y', b: 'z' };
+        const data = { idxs: 'x', uidx: 'y', b: 'z' };
         await getTyped(col).where('id', '4').update(data, { upsert: true });
         expect(await getTyped(col).all().count()).toEqual(4);
       });
 
       it('rejects attempts to upsert using a non-ID index', async ({ getTyped }) => {
-        const data = { id: '6', idxs: 'w', a: 'y', b: 'z' };
-        await expect(() => getTyped(col).where('a', 'x').update(data, { upsert: true })).throws(
+        const data = { id: '6', idxs: 'w', uidx: 'y', b: 'z' };
+        await expect(() => getTyped(col).where('uidx', 'x').update(data, { upsert: true })).throws(
           'Can only upsert by ID',
         );
         expect(await getTyped(col).all().count()).toEqual(3);
       });
 
       it('rejects attempts to upsert without a filter', async ({ getTyped }) => {
-        const data = { id: '6', idxs: 'w', a: 'y', b: 'z' };
+        const data = { id: '6', idxs: 'w', uidx: 'y', b: 'z' };
         await expect(() => getTyped(col).all().update(data, { upsert: true })).throws(
           'Cannot apply update to all items',
         );
@@ -498,7 +525,7 @@ export const contract = <T extends DB>({
 
       it('rejects duplicates if no value matches', async ({ getTyped }) => {
         await expect(() =>
-          getTyped(col).where('id', '6').update({ a: 'A2' }, { upsert: true }),
+          getTyped(col).where('id', '6').update({ uidx: 'A2' }, { upsert: true }),
         ).throws('duplicate');
         expect(await getTyped(col).all().count()).toEqual(3);
       });
@@ -840,46 +867,46 @@ export const contract = <T extends DB>({
       return () => dbBefore.close();
     });
 
-    const colBefore = withCollection(dbBefore, { idx: {}, value: { unique: true } }, [
-      { id: '1', idx: 1, value: 'v1', a: 'a1', b: 'b1' },
-      { id: '2', idx: 2, value: 'v2', a: 'a2', b: 'b2' },
-      { id: '3', idx: 3, value: 'v3', a: 'a2', b: 'b3' },
+    const colBefore = withCollection(dbBefore, { idx: {}, uidx: { unique: true } }, [
+      { id: '1', idx: 1, uidx: 'v1', a: 'a1', b: 'b1' },
+      { id: '2', idx: 2, uidx: 'v2', a: 'a2', b: 'b2' },
+      { id: '3', idx: 3, uidx: 'v3', a: 'a2', b: 'b3' },
     ]);
 
     it('adds indices', async ({ getTyped }) => {
       const col = getTyped(db).getCollection<TestType>(getTyped(colBefore).name, {
         idx: {},
-        value: { unique: true },
+        uidx: { unique: true },
         idxs: {},
       });
 
       await col.add({
         id: '4',
         idx: 4,
-        value: 'v4',
+        uidx: 'v4',
         a: 'a4',
         b: 'b4',
         idxs: 's4',
       });
 
       expect(new Set(await fromAsync(col.where('idxs', 's4').values()))).toEqual(
-        new Set([{ id: '4', idx: 4, value: 'v4', a: 'a4', b: 'b4', idxs: 's4' }]),
+        new Set([{ id: '4', idx: 4, uidx: 'v4', a: 'a4', b: 'b4', idxs: 's4' }]),
       );
     });
 
     it('adds indices with existing data', async ({ getTyped }) => {
       const col = getTyped(db).getCollection<TestType>(getTyped(colBefore).name, {
         idx: {},
-        value: { unique: true },
+        uidx: { unique: true },
         a: {},
       });
 
-      await col.add({ id: '4', idx: 4, value: 'v4', a: 'a1', b: 'b4' });
+      await col.add({ id: '4', idx: 4, uidx: 'v4', a: 'a1', b: 'b4' });
 
       expect(new Set(await fromAsync(col.where('a', 'a2').values()))).toEqual(
         new Set([
-          { id: '2', idx: 2, value: 'v2', a: 'a2', b: 'b2' },
-          { id: '3', idx: 3, value: 'v3', a: 'a2', b: 'b3' },
+          { id: '2', idx: 2, uidx: 'v2', a: 'a2', b: 'b2' },
+          { id: '3', idx: 3, uidx: 'v3', a: 'a2', b: 'b3' },
         ]),
       );
     });
@@ -887,42 +914,42 @@ export const contract = <T extends DB>({
     it('adds unique indices with existing data', async ({ getTyped }) => {
       const col = getTyped(db).getCollection<TestType>(getTyped(colBefore).name, {
         idx: {},
-        value: { unique: true },
+        uidx: { unique: true },
         b: { unique: true },
       });
 
-      await expect(() => col.add({ id: '4', idx: 4, value: 'v4', a: 'a4', b: 'b3' })).throws(
+      await expect(() => col.add({ id: '4', idx: 4, uidx: 'v4', a: 'a4', b: 'b3' })).throws(
         'duplicate',
       );
 
       expect(new Set(await fromAsync(col.where('b', 'b2').values()))).toEqual(
-        new Set([{ id: '2', idx: 2, value: 'v2', a: 'a2', b: 'b2' }]),
+        new Set([{ id: '2', idx: 2, uidx: 'v2', a: 'a2', b: 'b2' }]),
       );
     });
 
     it('adds uniqueness to existing indices', async ({ getTyped }) => {
       const col = getTyped(db).getCollection<TestType>(getTyped(colBefore).name, {
         idx: { unique: true },
-        value: { unique: true },
+        uidx: { unique: true },
       });
 
-      await expect(() => col.add({ id: '4', idx: 3, value: 'v4', a: 'a4', b: 'b4' })).throws(
+      await expect(() => col.add({ id: '4', idx: 3, uidx: 'v4', a: 'a4', b: 'b4' })).throws(
         'duplicate',
       );
 
       expect(new Set(await fromAsync(col.where('idx', 2).values()))).toEqual(
-        new Set([{ id: '2', idx: 2, value: 'v2', a: 'a2', b: 'b2' }]),
+        new Set([{ id: '2', idx: 2, uidx: 'v2', a: 'a2', b: 'b2' }]),
       );
     });
 
     it('throws if duplicate values exist when adding uniqueness', async ({ getTyped }) => {
-      await getTyped(colBefore).add({ id: '4', idx: 3, value: 'v4', a: 'a4', b: 'b4' });
+      await getTyped(colBefore).add({ id: '4', idx: 3, uidx: 'v4', a: 'a4', b: 'b4' });
 
       // exception may be asynchronous, so not seen until first operation:
       await expect(async () => {
         const col = getTyped(db).getCollection<TestType>(getTyped(colBefore).name, {
           idx: { unique: true },
-          value: { unique: true },
+          uidx: { unique: true },
         });
         await col.all().count();
       }).throws();
@@ -931,22 +958,22 @@ export const contract = <T extends DB>({
     it('removes uniqueness from existing indices', async ({ getTyped }) => {
       const col = getTyped(db).getCollection<TestType>(getTyped(colBefore).name, {
         idx: {},
-        value: {},
+        uidx: {},
       });
 
-      await col.add({ id: '4', idx: 4, value: 'v3', a: 'a4', b: 'b4' });
+      await col.add({ id: '4', idx: 4, uidx: 'v3', a: 'a4', b: 'b4' });
 
-      expect(new Set(await fromAsync(col.where('value', 'v3').values()))).toEqual(
+      expect(new Set(await fromAsync(col.where('uidx', 'v3').values()))).toEqual(
         new Set([
-          { id: '3', idx: 3, value: 'v3', a: 'a2', b: 'b3' },
-          { id: '4', idx: 4, value: 'v3', a: 'a4', b: 'b4' },
+          { id: '3', idx: 3, uidx: 'v3', a: 'a2', b: 'b3' },
+          { id: '4', idx: 4, uidx: 'v3', a: 'a4', b: 'b4' },
         ]),
       );
     });
 
     it('removes indices', async ({ getTyped }) => {
       const col = getTyped(db).getCollection<TestType>(getTyped(colBefore).name, {
-        value: { unique: true },
+        uidx: { unique: true },
       });
 
       await expect(() => col.where('idx', 1)).throws('No index for idx');
@@ -955,9 +982,9 @@ export const contract = <T extends DB>({
     it('removes unique indices', async ({ getTyped }) => {
       const col = getTyped(db).getCollection<TestType>(getTyped(colBefore).name, { idx: {} });
 
-      await col.add({ id: '4', idx: 4, value: 'v3', a: 'a4', b: 'b4' });
+      await col.add({ id: '4', idx: 4, uidx: 'v3', a: 'a4', b: 'b4' });
 
-      await expect(() => col.where('value', 'v2')).throws('No index for value');
+      await expect(() => col.where('uidx', 'v2')).throws('No index for uidx');
     });
   });
 
@@ -967,8 +994,9 @@ export const contract = <T extends DB>({
 interface TestType {
   id: string;
   idx?: number;
+  uidx?: string;
   idxs?: string;
-  value?: string;
+  value?: string; // may be encrypted/compressed/etc. by the storage (e.g. see 'encrypted integration') - cannot be used as an index
   a?: string;
   b?: string;
 }
