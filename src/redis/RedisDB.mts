@@ -11,7 +11,7 @@ export class RedisDB extends BaseDB {
     this._pool = pool;
   }
 
-  static async connect(url: string): Promise<RedisDB> {
+  static connect(url: string): RedisDB {
     // The built in reply transformer can only be disabled globally :(
     // See https://github.com/luin/ioredis/issues/1267
     Command.setReplyTransformer('hgetall', (x) => x);

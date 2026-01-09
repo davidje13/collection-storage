@@ -12,7 +12,7 @@ export class SQLiteDB extends BaseDB {
     this._pathname = pathname;
   }
 
-  static async connect(url: string): Promise<SQLiteDB> {
+  static connect(url: string): SQLiteDB {
     const parsedUrl = new URL(url);
     if (parsedUrl.hostname !== '') {
       throw new Error('SQLite DB must be on the local filesystem');

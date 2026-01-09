@@ -26,7 +26,9 @@ describe('cache', () => {
   });
 
   const db = withDB(() => MemoryDB.connect('memory://'));
-  const backingCol = withCollection<TestType>(db, { unique: { unique: true }, nonunique: {} }, []);
+  const backingCol = withCollection<TestType>(db, {
+    keys: { unique: { unique: true }, nonunique: {} },
+  });
   const col = beforeEach<Collection<TestType>>(({ getTyped, setParameter }) => {
     setParameter(
       cache(getTyped(backingCol), { capacity: 10, maxAge: 5000, time: getTyped(mockTime).fn }),
@@ -386,6 +388,5 @@ describe('cache integration', () => {
       makeWrappedDB(MemoryDB.connect('memory://'), (base) =>
         cache(base, { capacity: 10, maxAge: 5000 }),
       ),
-    testMigration: false,
   });
 });

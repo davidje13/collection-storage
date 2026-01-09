@@ -12,7 +12,7 @@ interface TestType {
 
 describe('migrate', () => {
   const db = withDB(() => MemoryDB.connect('memory://'));
-  const backingCol = withCollection<TestType>(db, {}, []);
+  const backingCol = withCollection<TestType>(db);
 
   it(
     'delegates add requests to the backing collection',

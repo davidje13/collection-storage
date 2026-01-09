@@ -376,6 +376,10 @@ class CachedCollection<T extends IDable> implements Collection<T> {
     }
   }
 
+  removeAllAndDestroy() {
+    return this._baseCollection.removeAllAndDestroy();
+  }
+
   /** @internal */ private _filter<K extends string & keyof T>(
     attribute: K,
     value: T[K],

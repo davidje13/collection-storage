@@ -1,16 +1,22 @@
+import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { versionIsGreaterOrEqual } from '../test-helpers/versionIsGreaterOrEqual.mts';
-import { contract } from '../test-helpers/db.contract-test.mts';
+import { contract, migrationContract } from '../test-helpers/db.contract-test.mts';
+import { makeWrappedDB } from '../test-helpers/makeWrappedDB.mts';
+import { cache, compress, encryptByKey, type IDable } from '../core/index.mts';
 
-describe('SQLiteDB', async () => {
-  assume(process.version, versionIsGreaterOrEqual('22.13'));
+assume(process.version, versionIsGreaterOrEqual('22.13'));
 
-  const { SQLiteDB } = await import('./SQLiteDB.mts');
+const { SQLiteDB } = await import('./SQLiteDB.mts');
 
+describe('SQLiteDB contract', () => {
+  contract({ factory: () => SQLiteDB.connect('sqlite://') });
+});
+
+describe('SQLiteDB migration contract', () => {
   let tempDir: string;
-  let unique = 0;
   beforeAll(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'cs-sqlite-'));
     if (!tempDir) {
@@ -19,11 +25,39 @@ describe('SQLiteDB', async () => {
     return () => rm(tempDir, { recursive: true });
   });
 
-  contract({
-    factory: (persist) => {
-      const url = persist ? `sqlite://${join(tempDir, `db-${unique++}`)}` : 'sqlite://';
-      return SQLiteDB.connect(url);
+  let unique = 0;
+
+  migrationContract({
+    factory: () => {
+      const url = `sqlite://${join(tempDir, `db-${unique++}`)}`;
+      return () => SQLiteDB.connect(url);
     },
-    migrationFactory: (existing) => SQLiteDB.connect('sqlite://' + existing.getFilePath()),
+  });
+});
+
+describe('SQLiteDB cached', () => {
+  contract({
+    factory: () =>
+      makeWrappedDB(SQLiteDB.connect('sqlite://'), (base) =>
+        cache(base, { capacity: 10, maxAge: 5000 }),
+      ),
+  });
+});
+
+describe('SQLiteDB compressed', () => {
+  contract({
+    factory: () =>
+      makeWrappedDB(SQLiteDB.connect('sqlite://'), (base) => compress(['value'], base)),
+  });
+});
+
+describe('SQLiteDB encrypted', () => {
+  const enc = encryptByKey(randomBytes(32));
+
+  contract({
+    factory: async () =>
+      makeWrappedDB(SQLiteDB.connect('sqlite://'), (base) =>
+        enc<IDable & Record<string, unknown>>()(['value'], base),
+      ),
   });
 });

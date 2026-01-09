@@ -226,4 +226,8 @@ export class MongoCollection<T extends IDable> extends BaseCollection<T> {
     const result = await this._collection.deleteMany(makeMongoSearch(filterAttribute, filterValue));
     return result.deletedCount || 0;
   }
+
+  protected override async internalDestroy() {
+    await this._collection.drop();
+  }
 }

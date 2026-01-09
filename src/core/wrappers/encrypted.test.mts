@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import {
   contract,
   fromAsync,
@@ -33,9 +33,9 @@ interface SecurityTestType {
 
 type SerialisedKeyT = Buffer;
 
-describe('encryption', () => {
+describe('encrypt', () => {
   const db = withDB(() => MemoryDB.connect('memory://'));
-  const rootKey = crypto.randomBytes(32);
+  const rootKey = randomBytes(32);
 
   describe('security', () => {
     it('handles encrypted malicious attribute names', { timeout: 5000 }, async ({ getTyped }) => {
@@ -64,11 +64,9 @@ describe('encryption', () => {
   });
 
   describe('encryptByKey', () => {
-    const backingCol = withCollection<Encrypted<TestType, 'encrypted'>>(
-      db,
-      { encrypted: {}, unencrypted: {}, unencUnique: { unique: true } },
-      [],
-    );
+    const backingCol = withCollection<Encrypted<TestType, 'encrypted'>>(db, {
+      keys: { encrypted: {}, unencrypted: {}, unencUnique: { unique: true } },
+    });
     const col = beforeEach<Collection<TestType>>(async ({ getTyped, setParameter }) => {
       const enc = encryptByKey(rootKey);
       const col = enc<TestType>()(['encrypted'], getTyped(backingCol));
@@ -188,12 +186,10 @@ describe('encryption', () => {
   });
 
   describe('encryptByRecord', () => {
-    const keyCol = withCollection<KeyRecord<string, SerialisedKeyT>>(db, {}, []);
-    const backingCol = withCollection<Encrypted<TestType, 'encrypted'>>(
-      db,
-      { encrypted: {}, unencrypted: {}, unencUnique: { unique: true } },
-      [],
-    );
+    const keyCol = withCollection<KeyRecord<string, SerialisedKeyT>>(db);
+    const backingCol = withCollection<Encrypted<TestType, 'encrypted'>>(db, {
+      keys: { encrypted: {}, unencrypted: {}, unencUnique: { unique: true } },
+    });
     const col = beforeEach<Collection<TestType>>(async ({ getTyped, setParameter }) => {
       const enc = encryptByRecord(getTyped(keyCol));
       const col = enc<TestType>()(['encrypted'], getTyped(backingCol));
@@ -303,7 +299,7 @@ describe('encryption', () => {
       value: unknown;
     }
 
-    const keyCol = withCollection<KeyRecord<string, SerialisedKeyT>>(db, {}, []);
+    const keyCol = withCollection<KeyRecord<string, SerialisedKeyT>>(db);
 
     it('supports JSON values', { timeout: 5000 }, async ({ getTyped }) => {
       const col = encryptByRecord(getTyped(keyCol))<CheckT>()(
@@ -331,12 +327,10 @@ describe('encryption', () => {
   });
 
   describe('encryptByRecordWithMasterKey', () => {
-    const keyCol = withCollection<KeyRecord<string, SerialisedKeyT>>(db, {}, []);
-    const backingCol = withCollection<Encrypted<TestType, 'encrypted'>>(
-      db,
-      { encrypted: {}, unencrypted: {}, unencUnique: { unique: true } },
-      [],
-    );
+    const keyCol = withCollection<KeyRecord<string, SerialisedKeyT>>(db);
+    const backingCol = withCollection<Encrypted<TestType, 'encrypted'>>(db, {
+      keys: { encrypted: {}, unencrypted: {}, unencUnique: { unique: true } },
+    });
     const col = beforeEach<Collection<TestType>>(async ({ getTyped, setParameter }) => {
       const enc = encryptByRecordWithMasterKey(rootKey, getTyped(keyCol));
       const col = enc<TestType>()(['encrypted'], getTyped(backingCol));
@@ -540,13 +534,12 @@ describe('encryption', () => {
 });
 
 describe('encrypted integration', () => {
-  const enc = encryptByKey(crypto.randomBytes(32));
+  const enc = encryptByKey(randomBytes(32));
 
   contract({
     factory: () =>
       makeWrappedDB(MemoryDB.connect('memory://'), (base) =>
         enc<IDable & Record<string, unknown>>()(['value'], base),
       ),
-    testMigration: false,
   });
 });

@@ -28,6 +28,8 @@ export interface Collection<T> {
   all(): Filtered<T>;
 
   where<K extends string & keyof T>(attribute: K, value: T[K]): Filtered<T>;
+
+  removeAllAndDestroy(): Promise<void>;
 }
 
 export interface Filtered<T> extends EntryReader<T> {

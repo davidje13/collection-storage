@@ -92,6 +92,10 @@ class MigratedCollection<
     return this._wrapFilter(this._baseCollection.where(attribute, value));
   }
 
+  removeAllAndDestroy() {
+    return this._baseCollection.removeAllAndDestroy();
+  }
+
   /** @internal */ private _extendAttributes<F extends readonly (string & keyof T)[]>(
     attributes: F,
   ): readonly (string & keyof T)[] {

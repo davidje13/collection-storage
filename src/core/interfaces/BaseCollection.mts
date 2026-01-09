@@ -114,6 +114,11 @@ export abstract class BaseCollection<T extends IDable> implements Collection<T> 
     };
   }
 
+  async removeAllAndDestroy(): Promise<void> {
+    await this._innerPreAct();
+    return this.internalDestroy();
+  }
+
   // Subclass constructors can call this with a promise that will resolve when
   // they are ready to be used. BaseCollection will automatically ensure that
   // other interactions are queued until this promise resolves.
@@ -226,4 +231,6 @@ export abstract class BaseCollection<T extends IDable> implements Collection<T> 
     filterAttribute: K | undefined,
     filterValue: T[K] | undefined,
   ): Promise<number> | number;
+
+  protected abstract internalDestroy(): Promise<void> | void;
 }

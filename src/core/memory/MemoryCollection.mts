@@ -199,6 +199,12 @@ export class MemoryCollection<T extends IDable> extends BaseCollection<T> {
     return count;
   }
 
+  protected override internalDestroy() {
+    this._backing._data.clear();
+    this._backing._customIndexData.clear();
+    this._backing._uniqueIndexDataPtrs.length = 0;
+  }
+
   /** @internal */ private _getSerialisedIds<K extends string & keyof T>(
     filterAttribute: K | undefined,
     filterValue: T[K] | undefined,

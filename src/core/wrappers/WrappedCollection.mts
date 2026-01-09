@@ -133,6 +133,10 @@ export class WrappedCollection<
     );
   }
 
+  removeAllAndDestroy() {
+    return this._baseCollection.removeAllAndDestroy();
+  }
+
   /** @internal */ private async _wrapAll(
     record: Readonly<T>,
     extra?: Record<string, unknown>,

@@ -1,18 +1,8 @@
 import { MemoryDB } from './MemoryDB.mts';
-import { contract } from '../../test-helpers/db.contract-test.mts';
+import { contract, migrationContract } from '../../test-helpers/db.contract-test.mts';
 import 'lean-test';
 
 describe('MemoryDB', () => {
-  let unique = 0;
-
-  contract({
-    factory: (persist) => {
-      const id = persist ? `db-${unique++}` : '';
-      return MemoryDB.connect(`memory://${id}`);
-    },
-    migrationFactory: (existing) => MemoryDB.connect(`memory://${existing.databaseName}`),
-  });
-
   it('shares data between databases with the same name', { timeout: 5000 }, async () => {
     const db1 = MemoryDB.connect('memory://foo');
     const db2 = MemoryDB.connect('memory://foo');
@@ -60,15 +50,21 @@ describe('MemoryDB', () => {
   });
 });
 
-describe('MemoryDB with simulated latency', () => {
+describe('MemoryDB contract', () => {
+  contract({ factory: () => MemoryDB.connect('memory://') });
+});
+
+describe('MemoryDB migration contract', () => {
   let unique = 0;
 
-  contract({
-    factory: (persist) => {
-      const id = persist ? `db-latency-${unique++}` : '';
-      return MemoryDB.connect(`memory://${id}?simulatedLatency=20`);
+  migrationContract({
+    factory: () => {
+      const url = `memory://db-${unique++}`;
+      return () => MemoryDB.connect(url);
     },
-    migrationFactory: (existing) =>
-      MemoryDB.connect(`memory://${existing.databaseName}?simulatedLatency=20`),
   });
+});
+
+describe('MemoryDB with simulated latency', () => {
+  contract({ factory: () => MemoryDB.connect('memory://?simulatedLatency=20') });
 });

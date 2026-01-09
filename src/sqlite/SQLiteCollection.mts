@@ -141,6 +141,10 @@ export class SQLiteCollection<T extends IDable> extends BaseCollection<T> {
     return result.changes as number;
   }
 
+  protected override internalDestroy() {
+    this._db.exec(withIdentifiers(STATEMENTS.DROP_TABLE, { T: this._tableName }));
+  }
+
   /** @internal */ private _tableQuery(queryName: keyof typeof STATEMENTS): StatementSync {
     if (this.closed) {
       throw new Error('Connection closed');
@@ -159,6 +163,7 @@ export class SQLiteCollection<T extends IDable> extends BaseCollection<T> {
 const STATEMENTS = {
   CREATE_TABLE:
     'CREATE TABLE IF NOT EXISTS $T (id TEXT NOT NULL PRIMARY KEY,data BLOB NOT NULL) STRICT',
+  DROP_TABLE: 'DROP TABLE IF EXISTS $T',
 
   GET_INDEX_NAMES: 'SELECT name FROM pragma_index_list(?)',
 

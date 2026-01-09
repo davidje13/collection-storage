@@ -263,6 +263,27 @@ export class RedisCollection<T extends IDable> extends BaseCollection<T> {
     }, unwatchAll);
   }
 
+  protected override internalDestroy() {
+    return this._pool.retryWithConnection(async (client) => {
+      for (const key of this.indices.getCustomIndices()) {
+        await this._removeAllByPattern(client, `${this._prefix}-${key}:*`);
+      }
+
+      await this._removeAllByPattern(client, this._makeKey('*'));
+    });
+  }
+
+  /** @internal */ private async _removeAllByPattern(client: ERedis, pattern: string) {
+    const stream = client.scanStream({ match: pattern, count: 100 });
+
+    for await (const keysBatch of stream) {
+      const keys = keysBatch as string[];
+      if (keys.length > 0) {
+        await client.del(keys);
+      }
+    }
+  }
+
   /** @internal */ private _makeKey(serialisedId: string): string {
     return `${this._prefix}:${serialisedId}`;
   }

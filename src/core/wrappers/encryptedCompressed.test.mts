@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { MemoryDB } from '../memory/MemoryDB.mts';
 import { encryptByKey, type Encrypted } from './encrypted.mts';
 import { compress, type Compressed } from './compressed.mts';
@@ -9,8 +9,8 @@ interface TestType {
   data: string;
 }
 
-describe('compression + encryption', () => {
-  const enc = encryptByKey(crypto.randomBytes(32));
+describe('compress + encrypt', () => {
+  const enc = encryptByKey(randomBytes(32));
   const data = 'this is a message which will be compressed and encrypted';
 
   it('stores and retrieves values transparently', { timeout: 5000 }, async () => {

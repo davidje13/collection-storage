@@ -1,4 +1,7 @@
-import { contract, fromAsync } from '../test-helpers/db.contract-test.mts';
+import { randomBytes } from 'node:crypto';
+import { cache, compress, encryptByKey, type IDable } from '../core/index.mts';
+import { contract, fromAsync, migrationContract } from '../test-helpers/db.contract-test.mts';
+import { makeWrappedDB } from '../test-helpers/makeWrappedDB.mts';
 import { DynamoDB } from './DynamoDB.mts';
 
 const url = new URL(
@@ -59,7 +62,9 @@ const KNOWN_CONSUMPTION: Record<string, number> = {
   'remove > removes items from the collection': 3,
   'remove > removes all items matching the query': 5.5,
   'remove > returns 0 if no values match for ID': 1,
+};
 
+const KNOWN_MIGRATION_CONSUMPTION: Record<string, number> = {
   'data migration > adds indices': 11.5,
   'data migration > adds indices with existing data': 12.5,
   'data migration > adds unique indices with existing data': 13,
@@ -69,7 +74,7 @@ const KNOWN_CONSUMPTION: Record<string, number> = {
   'data migration > removes unique indices': 2,
 };
 
-describe('DynamoDB', () => {
+describe('DynamoDB contract', () => {
   const checkedConsumptions = new Set<string>();
 
   beforeAll(deleteTestTables);
@@ -106,7 +111,48 @@ describe('DynamoDB', () => {
       console.error(`KNOWN_CONSUMPTION contained untested keys:\n${items}`);
     }
   });
+});
 
+describe('DynamoDB migration contract', () => {
+  const checkedConsumptions = new Set<string>();
+
+  beforeAll(deleteTestTables);
+  afterAll(deleteTestTables); // clean up after as well as before
+
+  const testId = beforeEach<string>(({ testPath, setParameter }) => {
+    setParameter(testPath.slice(2).join(' > '));
+  });
+
+  const { dbAfter } = migrationContract({
+    factory: () => () => DynamoDB.connect(url.href),
+    testWrapper: ({ getTyped }) => {
+      const ddb = getTyped(dbAfter).getDDB();
+      const before = ddb.getConsumedUnits();
+
+      const fullname = getTyped(testId);
+      checkedConsumptions.add(fullname);
+      const expectedUnits = KNOWN_MIGRATION_CONSUMPTION[fullname];
+      if (expectedUnits === undefined) {
+        return;
+      }
+
+      return () => {
+        expect(ddb.getConsumedUnits() - before).toEqual(expectedUnits);
+      };
+    },
+  });
+
+  afterAll(() => {
+    const untested = new Set(Object.keys(KNOWN_MIGRATION_CONSUMPTION));
+    checkedConsumptions.forEach((key) => untested.delete(key));
+    if (untested.size) {
+      const items = [...untested].join('\n');
+      console.error(`KNOWN_MIGRATION_CONSUMPTION contained untested keys:\n${items}`);
+    }
+  });
+});
+
+describe('DynamoDB scaling', () => {
   it('can share tables between connections', { timeout: 5000 }, async () => {
     const db1 = DynamoDB.connect(url.href);
     const db2 = DynamoDB.connect(url.href);
@@ -125,7 +171,9 @@ describe('DynamoDB', () => {
       await db2.close();
     }
   });
+});
 
+describe('DynamoDB provisioning', () => {
   it(
     'uses the given throughput function to determine provisioned throughput',
     { timeout: 5000 },
@@ -180,5 +228,31 @@ describe('DynamoDB', () => {
     } finally {
       await db.close();
     }
+  });
+});
+
+describe('DynamoDB cached', () => {
+  contract({
+    factory: () =>
+      makeWrappedDB(DynamoDB.connect(url.href), (base) =>
+        cache(base, { capacity: 10, maxAge: 5000 }),
+      ),
+  });
+});
+
+describe('DynamoDB compressed', () => {
+  contract({
+    factory: () => makeWrappedDB(DynamoDB.connect(url.href), (base) => compress(['value'], base)),
+  });
+});
+
+describe('DynamoDB encrypted', () => {
+  const enc = encryptByKey(randomBytes(32));
+
+  contract({
+    factory: async () =>
+      makeWrappedDB(DynamoDB.connect(url.href), (base) =>
+        enc<IDable & Record<string, unknown>>()(['value'], base),
+      ),
   });
 });

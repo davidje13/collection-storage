@@ -17,13 +17,11 @@ interface TestType {
   compressed: string;
 }
 
-describe('compression', () => {
+describe('compress', () => {
   const db = withDB(() => MemoryDB.connect('memory://'));
-  const backingCol = withCollection<Compressed<TestType, 'compressed'>>(
-    db,
-    { compressed: {}, uncompressed: {}, uncompUnique: { unique: true } },
-    [],
-  );
+  const backingCol = withCollection<Compressed<TestType, 'compressed'>>(db, {
+    keys: { compressed: {}, uncompressed: {}, uncompUnique: { unique: true } },
+  });
   const col = beforeEach<Collection<TestType>>(async ({ getTyped, setParameter }) => {
     const col = compress(['compressed'], getTyped(backingCol));
     setParameter(col);
@@ -119,6 +117,5 @@ describe('compressed integration', () => {
   contract({
     factory: () =>
       makeWrappedDB(MemoryDB.connect('memory://'), (base) => compress(['value'], base)),
-    testMigration: false,
   });
 });

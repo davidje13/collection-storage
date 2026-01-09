@@ -130,6 +130,10 @@ export class PostgresCollection<T extends IDable> extends BaseCollection<T> {
     return raw.rowCount ?? 0;
   }
 
+  protected override async internalDestroy() {
+    await this._pool.query(withIdentifiers(STATEMENTS.DROP_TABLE, { T: this._tableName }));
+  }
+
   /** @internal */ private _runTableQuery<R extends any[] = unknown[]>(
     queryName: keyof typeof STATEMENTS,
     ...values: unknown[]
@@ -155,6 +159,7 @@ export class PostgresCollection<T extends IDable> extends BaseCollection<T> {
 
 const STATEMENTS = {
   CREATE_TABLE: 'CREATE TABLE IF NOT EXISTS $T (id TEXT NOT NULL PRIMARY KEY,data HSTORE NOT NULL)',
+  DROP_TABLE: 'DROP TABLE IF EXISTS $T',
 
   GET_INDEX_NAMES:
     'SELECT indexname FROM pg_indexes WHERE tablename=$1 AND schemaname=current_schema()',

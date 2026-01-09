@@ -441,6 +441,11 @@ export class DynamoCollection<T extends IDable> extends BaseCollection<T> {
     return successes.filter((success) => success).length;
   }
 
+  protected override async internalDestroy() {
+    await this._ddb.deleteTable(this._tableName);
+    await this._ddb.deleteTable(indexTable(this._tableName)).catch(ignore);
+  }
+
   /** @internal */ private async _atomicPutUniques(
     id: DDBValue,
     item: DDBItem,

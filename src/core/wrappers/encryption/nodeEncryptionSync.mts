@@ -1,4 +1,10 @@
-import crypto, { type KeyObject } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createSecretKey,
+  randomBytes,
+  type KeyObject,
+} from 'node:crypto';
 import type { Encryption } from './Encryption.mts';
 
 const ALG = 'aes-256-cbc';
@@ -7,8 +13,8 @@ const IV_LEN = 16;
 
 export const nodeEncryptionSync: Encryption<KeyObject, Buffer> = {
   encrypt: (key: KeyObject, v: Buffer): Buffer => {
-    const iv = crypto.randomBytes(IV_LEN);
-    const cipher = crypto.createCipheriv(ALG, key, iv);
+    const iv = randomBytes(IV_LEN);
+    const cipher = createCipheriv(ALG, key, iv);
     const part = cipher.update(v);
     const final = cipher.final();
     return Buffer.concat([ALG_BUF, iv, part, final]);
@@ -22,16 +28,16 @@ export const nodeEncryptionSync: Encryption<KeyObject, Buffer> = {
     const iv = v.subarray(ALG_BUF.length, ALG_BUF.length + IV_LEN);
     const encrypted = v.subarray(ALG_BUF.length + IV_LEN);
 
-    const decipher = crypto.createDecipheriv(ALG, key, iv);
+    const decipher = createDecipheriv(ALG, key, iv);
     const part = decipher.update(encrypted);
     const final = decipher.final();
 
     return Buffer.concat([part, final]);
   },
 
-  generateKey: (): KeyObject => crypto.createSecretKey(crypto.randomBytes(32)),
+  generateKey: (): KeyObject => createSecretKey(randomBytes(32)),
 
   serialiseKey: (key: KeyObject): Buffer => key.export(),
 
-  deserialiseKey: (data: Buffer): KeyObject => crypto.createSecretKey(data),
+  deserialiseKey: (data: Buffer): KeyObject => createSecretKey(data),
 };
