@@ -39,22 +39,18 @@ function attributeFromMongo(name: string): string {
   return decodeURIComponent(name);
 }
 
-function isBson(v: unknown): v is MBinary {
-  return Boolean(v) && typeof v === 'object' && Boolean((v as any)._bsontype);
-}
-
 function valueToMongo(v: unknown): unknown {
   if (v instanceof Buffer) {
     return new MBinary(v);
   }
-  if (isBson(v)) {
+  if (v instanceof MBinary) {
     throw new Error('Must use Buffer to provide binary data');
   }
   return v;
 }
 
 function valueFromMongo(v: unknown): unknown {
-  if (isBson(v)) {
+  if (v instanceof MBinary) {
     return v.buffer;
   }
   return v;
