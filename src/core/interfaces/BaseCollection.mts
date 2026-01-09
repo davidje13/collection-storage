@@ -39,7 +39,7 @@ export abstract class BaseCollection<T extends IDable> implements Collection<T> 
 
   where<K extends string & keyof T>(filterAttribute: K, filterValue: T[K]): Filtered<T> {
     if (filterAttribute !== undefined && !this.indices.isIndex(filterAttribute)) {
-      throw new Error(`No index for ${filterAttribute}`);
+      throw new Error(`No index for attribute ${filterAttribute}`);
     }
     const c = this;
 
@@ -70,7 +70,7 @@ export abstract class BaseCollection<T extends IDable> implements Collection<T> 
       },
       async update(delta: Partial<T>, options: UpdateOptions = {}) {
         if (filterAttribute === undefined) {
-          throw new Error('Cannot apply update to all items');
+          throw new Error('Cannot apply update to all records');
         }
         if (filterAttribute === 'id' && delta.id !== undefined && delta.id !== filterValue) {
           throw new Error('Cannot update ID');
@@ -88,7 +88,7 @@ export abstract class BaseCollection<T extends IDable> implements Collection<T> 
           return c.internalUpsert(filterValue as T['id'], withoutId, options);
         }
         if (!c.indices.isIndex(filterAttribute)) {
-          throw new Error(`No index for ${filterAttribute}`);
+          throw new Error(`No index for attribute ${filterAttribute}`);
         }
         if (
           !c.indices.isUniqueIndex(filterAttribute) &&

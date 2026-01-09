@@ -343,7 +343,7 @@ class CachedCollection<T extends IDable> implements Collection<T> {
         return baseFilter.remove();
       },
       update() {
-        throw new Error('Cannot apply update to all items');
+        throw new Error('Cannot apply update to all records');
       },
 
       attrs<F extends readonly (string & keyof T)[]>(returnAttributes: F) {

@@ -218,7 +218,7 @@ export class MemoryCollection<T extends IDable> extends BaseCollection<T> {
     }
     const index = this._backing._customIndexData.get(filterAttribute);
     if (!index) {
-      throw new Error(`Requested key ${filterAttribute} not indexed`);
+      throw new Error(`Requested attribute ${filterAttribute} not indexed`);
     }
     return index.get(sKey) ?? VOID_SET;
   }

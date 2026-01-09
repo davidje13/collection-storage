@@ -38,7 +38,7 @@ export abstract class BaseDB implements DB {
     if (cached) {
       const [cachedNormKeys, cachedCol] = cached;
       if (normKeys !== cachedNormKeys) {
-        throw new Error(`Cannot requuest collection '${name}' with different keys`);
+        throw new Error(`Cannot request collection '${name}' with different keys`);
       }
       return cachedCol as CollectionT;
     }

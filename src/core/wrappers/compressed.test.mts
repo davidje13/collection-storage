@@ -94,7 +94,9 @@ describe('compress', () => {
   );
 
   it('prevents filtering by compressed key', ({ getTyped }) => {
-    expect(() => getTyped(col).where('compressed', 'foo')).throws('Cannot filter by wrapped value');
+    expect(() => getTyped(col).where('compressed', 'foo')).throws(
+      'Cannot filter by wrapped attribute compressed',
+    );
   });
 
   it('allows reading filtered columns', { timeout: 5000 }, async ({ getTyped }) => {

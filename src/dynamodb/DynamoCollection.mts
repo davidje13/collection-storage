@@ -77,7 +77,9 @@ function fromDynamoValue(value: DDBValue): unknown {
   if (isDynamoBinary(value)) {
     return deserialiseValueBin(Buffer.from(value.B, 'base64'));
   }
-  throw new Error('unexpected value type from DDB');
+  throw new Error(
+    `unexpected value type from DDB: ${value && typeof value === 'object' ? Object.keys(value) : typeof value}`,
+  );
 }
 
 function fromDynamoItem<T = Record<string, unknown>>(value: DDBItem): T;
@@ -92,7 +94,9 @@ function fromDynamoItem<T = Record<string, unknown>>(value: DDBItem | null | und
 
 function toDynamoKey(attr: string, value: DDBValue): DDBValue {
   if (!isDynamoBinary(value)) {
-    throw new Error('unexpected value type from DDB');
+    throw new Error(
+      `unexpected value type from DDB: ${value && typeof value === 'object' ? Object.keys(value) : typeof value}`,
+    );
   }
   return {
     B: Buffer.concat([Buffer.from(`${attr}:`, 'utf8'), Buffer.from(value.B, 'base64')]).toString(

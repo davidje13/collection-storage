@@ -111,7 +111,9 @@ describe('encrypt', () => {
     );
 
     it('prevents filtering by encrypted key', ({ getTyped }) => {
-      expect(() => getTyped(col).where('encrypted', 9)).throws('Cannot filter by wrapped value');
+      expect(() => getTyped(col).where('encrypted', 9)).throws(
+        'Cannot filter by wrapped attribute encrypted',
+      );
     });
 
     it('allows reading filtered columns', { timeout: 5000 }, async ({ getTyped }) => {
@@ -180,7 +182,7 @@ describe('encrypt', () => {
       });
       const enc = encryptByKey(rootKey);
       expect(() => enc<typeof record>()(['value'], baseCol)).throws(
-        'Cannot wrap unique index value',
+        'Cannot wrap unique attribute value',
       );
     });
   });
@@ -257,7 +259,9 @@ describe('encrypt', () => {
     );
 
     it('prevents filtering by encrypted key', ({ getTyped }) => {
-      expect(() => getTyped(col).where('encrypted', 9)).throws('Cannot filter by wrapped value');
+      expect(() => getTyped(col).where('encrypted', 9)).throws(
+        'Cannot filter by wrapped attribute encrypted',
+      );
     });
 
     it('prevents reading filtered columns without id', { timeout: 5000 }, async ({ getTyped }) => {
@@ -473,7 +477,9 @@ describe('encrypt', () => {
     });
 
     it('prevents filtering by encrypted key', ({ getTyped }) => {
-      expect(() => getTyped(col).where('encrypted', 9)).throws('Cannot filter by wrapped value');
+      expect(() => getTyped(col).where('encrypted', 9)).throws(
+        'Cannot filter by wrapped attribute encrypted',
+      );
     });
 
     it('prevents reading filtered columns without id', { timeout: 5000 }, async ({ getTyped }) => {

@@ -25,7 +25,7 @@ async function deleteTestTables(): Promise<void> {
 }
 
 const KNOWN_CONSUMPTION: Record<string, number> = {
-  'stores and retrieves data': 2,
+  'stores and retrieves data > string)': 2,
 
   'add > rejects duplicate IDs': 2,
   'add > rejects duplicates in unique indices': 4,
@@ -65,13 +65,13 @@ const KNOWN_CONSUMPTION: Record<string, number> = {
 };
 
 const KNOWN_MIGRATION_CONSUMPTION: Record<string, number> = {
-  'data migration > adds indices': 11.5,
-  'data migration > adds indices with existing data': 12.5,
-  'data migration > adds unique indices with existing data': 13,
-  'data migration > adds uniqueness to existing indices': 13,
-  'data migration > removes uniqueness from existing indices': 5.5,
-  'data migration > removes indices': 0,
-  'data migration > removes unique indices': 2,
+  'adds indices': 11.5,
+  'adds indices with existing data': 12.5,
+  'adds unique indices with existing data': 13,
+  'adds uniqueness to existing indices': 13,
+  'removes uniqueness from existing indices': 5.5,
+  'removes indices': 0,
+  'removes unique indices': 2,
 };
 
 describe('DynamoDB contract', () => {
@@ -109,6 +109,7 @@ describe('DynamoDB contract', () => {
     if (untested.size) {
       const items = [...untested].join('\n');
       console.error(`KNOWN_CONSUMPTION contained untested keys:\n${items}`);
+      fail();
     }
   });
 });
@@ -148,6 +149,7 @@ describe('DynamoDB migration contract', () => {
     if (untested.size) {
       const items = [...untested].join('\n');
       console.error(`KNOWN_MIGRATION_CONSUMPTION contained untested keys:\n${items}`);
+      fail();
     }
   });
 });

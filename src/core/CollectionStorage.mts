@@ -42,6 +42,7 @@ export class CollectionStorageFactory {
     } catch (e) {
       throw new Error(
         `Failed to connect to database "${url}": ${e instanceof Error ? e.message : e}`,
+        { cause: e },
       );
     }
   }

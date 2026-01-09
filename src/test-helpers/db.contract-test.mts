@@ -485,7 +485,7 @@ export const contract = <T extends DB>({
 
     it('rejects attempts to update without a filter', async ({ getTyped }) => {
       await expect(() => getTyped(col).all().update({ value: 'updated' })).throws(
-        'Cannot apply update to all items',
+        'Cannot apply update to all records',
       );
     });
 
@@ -522,7 +522,7 @@ export const contract = <T extends DB>({
       it('rejects attempts to upsert without a filter', async ({ getTyped }) => {
         const data = { id: '6', idxs: 'w', uidx: 'y', b: 'z' };
         await expect(() => getTyped(col).all().update(data, { upsert: true })).throws(
-          'Cannot apply update to all items',
+          'Cannot apply update to all records',
         );
         expect(await getTyped(col).all().count()).toEqual(3);
       });
@@ -1044,7 +1044,7 @@ export const migrationContract = <T extends DB>({
       uidx: { unique: true },
     });
 
-    await expect(() => col.where('idx', 1)).throws('No index for idx');
+    await expect(() => col.where('idx', 1)).throws('No index for attribute idx');
   });
 
   it('removes unique indices', async ({ getTyped }) => {
@@ -1052,7 +1052,7 @@ export const migrationContract = <T extends DB>({
 
     await col.add({ id: '4', idx: 4, uidx: 'v3', a: 'a4', b: 'b4' });
 
-    await expect(() => col.where('uidx', 'v2')).throws('No index for uidx');
+    await expect(() => col.where('uidx', 'v2')).throws('No index for attribute uidx');
   });
 
   return { dbBefore, dbAfter };

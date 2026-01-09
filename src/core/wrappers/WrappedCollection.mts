@@ -45,7 +45,7 @@ export class WrappedCollection<
     this._wrapper = wrapper;
     for (const attribute of attributes) {
       if (baseCollection.indices.isUniqueIndex(attribute)) {
-        throw new Error(`Cannot wrap unique index ${attribute}`);
+        throw new Error(`Cannot wrap unique attribute ${attribute}`);
       }
     }
   }
@@ -124,7 +124,7 @@ export class WrappedCollection<
 
   where<K extends string & keyof T>(attribute: K, value: T[K]): Filtered<T> {
     if (this._attributes.includes(attribute as any)) {
-      throw new Error('Cannot filter by wrapped value');
+      throw new Error(`Cannot filter by wrapped attribute ${attribute}`);
     }
 
     return this._wrapFilter(

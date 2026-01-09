@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import type { IDable } from '../interfaces/IDable.mts';
 import type { Collection } from '../interfaces/Collection.mts';
 import { serialiseValueBin, deserialiseValueBin } from '../helpers/serialiser.mts';
+import { debugType } from '../helpers/debugType.mts';
 import { WrappedCollection, type Wrapped } from './WrappedCollection.mts';
 
 type CompressableKeys<T> = readonly (keyof Omit<T, 'id'> & string)[];
@@ -44,7 +45,7 @@ async function decompressValue(
     if (allowRaw) {
       return v; // probably an old record before compression was added
     }
-    throw new Error(`unknown compression type for ${collectionName}.${attr}`);
+    throw new Error(`uncompressed data in ${collectionName}.${attr}: ${debugType(v)}`);
   }
   if (v[0] === 0x1f && v[1] === 0x8b) {
     // gzip "magic number"
@@ -56,7 +57,9 @@ async function decompressValue(
   if (allowRaw && allowRawBuffer) {
     return v;
   }
-  throw new Error(`unknown compression format for ${collectionName}.${attr}`);
+  throw new Error(
+    `unknown compression format or uncompressed byte data in ${collectionName}.${attr}`,
+  );
 }
 
 export function compress<T extends IDable, F extends CompressableKeys<T>>(

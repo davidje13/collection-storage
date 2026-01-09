@@ -2,6 +2,7 @@ import type { IDable, IDableBy, IDType } from '../interfaces/IDable.mts';
 import type { Collection } from '../interfaces/Collection.mts';
 import { LruCache } from '../helpers/LruCache.mts';
 import { serialiseValueBin, deserialiseValueBin } from '../helpers/serialiser.mts';
+import { debugType } from '../helpers/debugType.mts';
 import { WrappedCollection, type Wrapped } from './WrappedCollection.mts';
 import type { Encryption } from './encryption/Encryption.mts';
 import { nodeEncryptionSync } from './encryption/nodeEncryptionSync.mts';
@@ -85,7 +86,7 @@ function encryptByKey<KeyT, SerialisedKeyT>(
             if (allowRaw) {
               return v; // probably an old record before encryption was added
             }
-            throw new Error(`unencrypted data in ${baseCollection.name}.${attr}`);
+            throw new Error(`unencrypted data in ${baseCollection.name}.${attr}: ${debugType(v)}`);
           }
           return deserialiseValueBin(await encryption.decrypt(key, v));
         },
@@ -109,15 +110,8 @@ function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
     encryption = nodeEncryptionSync as any,
     allowRaw = false,
     keyCache,
-    ...extraOptions
   }: EncryptionOptions<KeyT, SerialisedKeyT> & RecordEncryptionOptions = {},
 ): Encrypter<ID> {
-  if ((extraOptions as any).cacheSize) {
-    throw new Error(
-      '{ cacheSize: size } is deprecated; use { keyCache: { capacity: size } } instead',
-    );
-  }
-
   if (keyCache) {
     keyCollection = cache(keyCollection, keyCache);
   }
@@ -168,7 +162,7 @@ function encryptByRecord<ID extends IDType, KeyT, SerialisedKeyT>(
             if (allowRaw) {
               return v; // probably an old record before encryption was added
             }
-            throw new Error(`unencrypted data in ${baseCollection.name}.${attr}`);
+            throw new Error(`unencrypted data in ${baseCollection.name}.${attr}: ${debugType(v)}`);
           }
           return deserialiseValueBin(await encryption.decrypt(key, v));
         },
