@@ -22,6 +22,6 @@
   },
   "homepage": "https://github.com/davidje13/collection-storage#readme",
   "dependencies": {
-    "mongodb": "6.x"
+    "mongodb": "7.x"
   }
 }
