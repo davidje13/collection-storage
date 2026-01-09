@@ -16,7 +16,12 @@ const TERSER_OPTS = {
   module: true,
   format: { ascii_only: true, preserve_annotations: true },
   mangle: {
-    properties: { regex: /^_/ },
+    properties: {
+      regex: /^_/,
+      reserved: [
+        '__type', // used in AWS API responses
+      ],
+    },
   },
 };
 
