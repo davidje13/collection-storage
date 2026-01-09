@@ -8,6 +8,7 @@ import {
   type CollectionOptions,
   partialDeserialiseRecord,
   type Serialised,
+  DuplicateError,
 } from '../core/index.mts';
 import { withIdentifiers } from './sql.mts';
 
@@ -37,8 +38,8 @@ export class SQLiteCollection<T extends IDable> extends BaseCollection<T> {
       sRecord.delete('id');
       try {
         this._tableQuery('INSERT').run(sId, toDB(sRecord));
-      } catch (err: unknown) {
-        convertError(err);
+      } catch (err) {
+        convertError(this.name, err);
       }
     }
   }
@@ -46,8 +47,8 @@ export class SQLiteCollection<T extends IDable> extends BaseCollection<T> {
   /** @internal */ protected override internalUpsert(id: T['id'], update: Partial<T>) {
     try {
       this._tableQuery('UPSERT_ID').run(serialiseValue(id), toDB(serialiseRecord(update)));
-    } catch (err: unknown) {
-      convertError(err);
+    } catch (err) {
+      convertError(this.name, err);
     }
   }
 
@@ -70,7 +71,7 @@ export class SQLiteCollection<T extends IDable> extends BaseCollection<T> {
       } else {
         this._tableQuery('UPDATE').run(data, toJSONPath(filterAttribute), sValue);
       }
-    } catch (err: unknown) {
+    } catch (err) {
       if (err instanceof Error && err.message.includes('NOT NULL constraint failed')) {
         // We insert NULL to intentionally throw an error in UPDATE_IF_ID to distinguish between
         // the case of no records found to update, vs. found a record but did not match ID.
@@ -78,7 +79,7 @@ export class SQLiteCollection<T extends IDable> extends BaseCollection<T> {
         // Nothing else can cause a NULL error in these statements statement.
         throw new Error('Cannot update ID');
       }
-      convertError(err);
+      convertError(this.name, err);
     }
   }
 
@@ -235,9 +236,9 @@ function configureTable(db: DatabaseSync, tableName: string, keys: DBKeys<any> =
   }
 }
 
-function convertError(err: unknown) {
+function convertError(collection: string, err: unknown) {
   if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
-    throw new Error('duplicate');
+    throw new DuplicateError(collection);
   }
   throw err;
 }

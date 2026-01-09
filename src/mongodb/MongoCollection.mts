@@ -15,6 +15,7 @@ import {
   safeGet,
   retry,
   type CollectionOptions,
+  DuplicateError,
 } from '../core/index.mts';
 
 const MONGO_ID = '_id';
@@ -56,14 +57,16 @@ function valueFromMongo(v: unknown): unknown {
   return v;
 }
 
-const MONGO_ERROR_IDX = /^.*? index: ([^ ]+) dup key:.*$/;
-function getErrorIndex(e: MongoError): string {
-  return MONGO_ERROR_IDX.exec(e.message)?.[1] || '';
+const MONGO_ERROR_IDX = /^.*? index: ([^ ]+)_\d* dup key:.*$/;
+function getDuplicateErrorAttribute(e: unknown) {
+  if (!(e instanceof MongoError) || e.code !== 11000) {
+    return null;
+  }
+  const index = MONGO_ERROR_IDX.exec(e.message)?.[1];
+  return index ? (index === MONGO_ID ? 'id' : index) : 'unknown';
 }
 
-const withUpsertRetry = retry(
-  (e) => e instanceof MongoError && e.code === 11000 && getErrorIndex(e) === '_id_',
-);
+const withUpsertRetry = retry((e) => getDuplicateErrorAttribute(e) === 'id');
 
 function convertToMongo<T extends Partial<IDable>>(value: T): Record<string, unknown> {
   return mapEntries(value, valueToMongo, attrToMongo);
@@ -146,20 +149,30 @@ export class MongoCollection<T extends IDable> extends BaseCollection<T> {
   }
 
   protected override async internalAddBatch(records: T[]): Promise<void> {
-    await this._collection.insertMany(records.map(convertToMongo));
+    try {
+      await this._collection.insertMany(records.map(convertToMongo));
+    } catch (err) {
+      const idx = getDuplicateErrorAttribute(err);
+      throw idx ? new DuplicateError(this.name, idx) : err;
+    }
   }
 
   /** @internal */ protected override async internalUpsert(
     id: T['id'],
     delta: Partial<T>,
   ): Promise<void> {
-    await withUpsertRetry.promise(() =>
-      this._collection.updateOne(
-        makeMongoSearch('id', id),
-        { $set: convertToMongo(delta) },
-        { upsert: true },
-      ),
-    );
+    try {
+      await withUpsertRetry.promise(() =>
+        this._collection.updateOne(
+          makeMongoSearch('id', id),
+          { $set: convertToMongo(delta) },
+          { upsert: true },
+        ),
+      );
+    } catch (err) {
+      const idx = getDuplicateErrorAttribute(err);
+      throw idx ? new DuplicateError(this.name, idx) : err;
+    }
   }
 
   protected override async internalUpdate<K extends string & keyof T>(
@@ -175,12 +188,12 @@ export class MongoCollection<T extends IDable> extends BaseCollection<T> {
       } else {
         await this._collection.updateMany(query, mongoDelta);
       }
-    } catch (e) {
-      if (e instanceof Error && e.message.includes("would modify the immutable field '_id'")) {
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("would modify the immutable field '_id'")) {
         throw new Error('Cannot update ID');
-      } else {
-        throw e;
       }
+      const idx = getDuplicateErrorAttribute(err);
+      throw idx ? new DuplicateError(this.name, idx) : err;
     }
   }
 

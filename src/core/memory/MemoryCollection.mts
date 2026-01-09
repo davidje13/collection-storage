@@ -8,6 +8,7 @@ import {
   type Serialised,
   partialDeserialiseRecord,
 } from '../helpers/serialiser.mts';
+import { DuplicateError } from '../DuplicateError.mts';
 
 function sleep(millis: number): Promise<void> | void {
   if (!millis) {
@@ -151,9 +152,9 @@ export class MemoryCollection<T extends IDable> extends BaseCollection<T> {
     updates.forEach(({ _oldSerialised }) => this._removeIndices(_oldSerialised));
     try {
       updates.forEach(({ _newSerialised }) => this._checkDuplicates(_newSerialised, false));
-    } catch (e) {
+    } catch (err) {
       updates.forEach(({ _oldSerialised }) => this._populateIndices(_oldSerialised));
-      throw e;
+      throw err;
     }
     for (const { _newSerialised } of updates) {
       this._backing._data.set(_newSerialised.get('id')!, _newSerialised);
@@ -228,11 +229,11 @@ export class MemoryCollection<T extends IDable> extends BaseCollection<T> {
     checkId: boolean,
   ): void {
     if (checkId && this._backing._data.has(serialisedValue.get('id')!)) {
-      throw new Error(`duplicate ${this.name}.id`);
+      throw new DuplicateError(this.name, 'id');
     }
     for (const [attr, index] of this._backing._uniqueIndexDataPtrs) {
       if (index.has(serialisedValue.get(attr)!)) {
-        throw new Error(`duplicate ${this.name}.${attr}`);
+        throw new DuplicateError(this.name, attr);
       }
     }
   }

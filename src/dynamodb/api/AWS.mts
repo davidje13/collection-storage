@@ -182,8 +182,8 @@ export class AWS {
                   } else {
                     resolve({ status: res.statusCode, json });
                   }
-                } catch (e) {
-                  reject(e);
+                } catch (err) {
+                  reject(err);
                 }
               });
             });

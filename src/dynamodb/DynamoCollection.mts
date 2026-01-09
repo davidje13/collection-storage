@@ -7,6 +7,7 @@ import {
   makeKeyValue,
   mapEntries,
   safeGet,
+  DuplicateError,
 } from '../core/index.mts';
 import {
   DDB,
@@ -36,9 +37,9 @@ async function runAll<T>(
   }
 }
 
-function wrapError(type: string, message: string): (e: unknown) => void {
+function wrapError(type: string, errorFn: () => Error): (e: unknown) => void {
   return (e): void => {
-    throw AWSError.isType(e, type) ? new Error(message) : e;
+    throw AWSError.isType(e, type) ? errorFn() : e;
   };
 }
 
@@ -261,7 +262,8 @@ export class DynamoCollection<T extends IDable> extends BaseCollection<T> {
     delta: Partial<T>,
   ): Promise<void> {
     const ddbDelta = toDynamoItem({ id, ...delta });
-    const key = { id: ddbDelta['id']! };
+    const ddbID = ddbDelta['id']!;
+    const key = { id: ddbID };
     delete ddbDelta['id'];
 
     // optimistically try to update
@@ -271,9 +273,11 @@ export class DynamoCollection<T extends IDable> extends BaseCollection<T> {
 
         // if that fails due to the item not existing, try creating it
         () =>
-          this._putItem({ ...key, ...ddbDelta }).catch(
+          this._atomicPutUniques(ddbID, ddbDelta, this._uniqueKeys, () =>
+            this._ddb.putItem(this._tableName, { ...key, ...ddbDelta }, 'id'),
+          ).catch(
             handleError(
-              'duplicate id',
+              ConditionalCheckFailedException,
 
               // it that fails due to the item existing, the item was probably
               // created in the gap between calls; update it
@@ -283,7 +287,7 @@ export class DynamoCollection<T extends IDable> extends BaseCollection<T> {
                     ConditionalCheckFailedException,
 
                     // if it fails again, give up
-                    'Failed to upsert item',
+                    () => new Error('Failed to upsert item'),
                   ),
                 ),
             ),
@@ -467,17 +471,19 @@ export class DynamoCollection<T extends IDable> extends BaseCollection<T> {
       await runAll(uniqueKeys, successes, (attr) =>
         this._ddb
           .putItem(indexTableName, { ix: toDynamoKey(attr, item[attr]!), id }, 'ix')
-          .catch(wrapError(ConditionalCheckFailedException, `duplicate ${attr}`)),
+          .catch(
+            wrapError(ConditionalCheckFailedException, () => new DuplicateError(this.name, attr)),
+          ),
       );
       await fn();
-    } catch (e) {
+    } catch (err) {
       await this._ddb
         .batchDeleteItems(
           indexTableName,
           successes.map((attr) => ({ ix: toDynamoKey(attr, item[attr]!) })),
         )
         .catch(ignore); // best effort to reset state, but ignore errors here
-      throw e;
+      throw err;
     }
   }
 
@@ -485,7 +491,9 @@ export class DynamoCollection<T extends IDable> extends BaseCollection<T> {
     return this._atomicPutUniques(item['id']!, item, this._uniqueKeys, () =>
       this._ddb
         .putItem(this._tableName, item, 'id')
-        .catch(wrapError(ConditionalCheckFailedException, 'duplicate id')),
+        .catch(
+          wrapError(ConditionalCheckFailedException, () => new DuplicateError(this.name, 'id')),
+        ),
     );
   }
 
@@ -537,11 +545,11 @@ export class DynamoCollection<T extends IDable> extends BaseCollection<T> {
         );
       }
       return true;
-    } catch (e) {
-      if (AWSError.isType(e, ConditionalCheckFailedException)) {
+    } catch (err) {
+      if (AWSError.isType(err, ConditionalCheckFailedException)) {
         return false;
       }
-      throw e;
+      throw err;
     }
   }
 }

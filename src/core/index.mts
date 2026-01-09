@@ -2,6 +2,7 @@ import { CollectionStorage } from './CollectionStorage.mts';
 import { MemoryDB } from './memory/MemoryDB.mts';
 
 export { CollectionStorageFactory } from './CollectionStorage.mts';
+export { DuplicateError } from './DuplicateError.mts';
 export type { IDable } from './interfaces/IDable.mts';
 export type { DB, DBKeys } from './interfaces/DB.mts';
 export { BaseDB } from './interfaces/BaseDB.mts';

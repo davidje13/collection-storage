@@ -344,11 +344,11 @@ export class DDB {
           ProvisionedThroughput: throughput,
         });
         created = true;
-      } catch (e) {
-        if (AWSError.isType(e, ResourceInUseException)) {
+      } catch (err) {
+        if (AWSError.isType(err, ResourceInUseException)) {
           await this._replaceIndices(tableName, secondaryIndices);
         } else {
-          throw e;
+          throw err;
         }
       }
 

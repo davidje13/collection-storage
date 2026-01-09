@@ -16,19 +16,19 @@ export const retry = (
     for (let attempt = 1; ; ++attempt) {
       try {
         return await fn();
-      } catch (e) {
-        if (!shouldRetry(e)) {
-          throw e;
+      } catch (err) {
+        if (!shouldRetry(err)) {
+          throw err;
         }
 
         const delay = Math.min(currentDelay, maxDelayMillis) * (jitter ? Math.random() : 1);
         currentDelay *= delayGrowth;
 
         if (Date.now() + delay > limit) {
-          if (e instanceof Error) {
-            e.message += ` (timeout after ${attempt} attempts)`;
+          if (err instanceof Error) {
+            err.message += ` (timeout after ${attempt} attempts)`;
           }
-          throw e;
+          throw err;
         }
 
         await sleep(delay);
@@ -49,19 +49,19 @@ export const retry = (
           yield item;
         }
         return;
-      } catch (e) {
-        if (any || !shouldRetry(e)) {
-          throw e;
+      } catch (err) {
+        if (any || !shouldRetry(err)) {
+          throw err;
         }
 
         const delay = Math.min(currentDelay, maxDelayMillis) * (jitter ? Math.random() : 1);
         currentDelay *= delayGrowth;
 
         if (Date.now() + delay > limit) {
-          if (e instanceof Error) {
-            e.message += ` (timeout after ${attempt} attempts)`;
+          if (err instanceof Error) {
+            err.message += ` (timeout after ${attempt} attempts)`;
           }
-          throw e;
+          throw err;
         }
 
         await sleep(delay);

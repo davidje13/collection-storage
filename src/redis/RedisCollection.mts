@@ -8,6 +8,7 @@ import {
   deserialiseRecord,
   type Serialised,
   type CollectionOptions,
+  DuplicateError,
 } from '../core/index.mts';
 import type { RedisConnectionPool } from './RedisConnectionPool.mts';
 import { multiExec } from './helpers.mts';
@@ -103,7 +104,7 @@ export class RedisCollection<T extends IDable> extends BaseCollection<T> {
         const sRecord = serialiseRecord(value);
         const added = await this._runAdd(client, sRecord, false);
         if (!added) {
-          throw new Error('duplicate');
+          throw new DuplicateError(this.name);
         }
       }
     });
@@ -126,7 +127,7 @@ export class RedisCollection<T extends IDable> extends BaseCollection<T> {
         } else if (upsert) {
           const insertValue = new Map(sDelta).set('id', sValue);
           if (!(await this._runAdd(client, insertValue, true))) {
-            throw new Error('duplicate');
+            throw new DuplicateError(this.name);
           }
         }
       }, unwatchAll);
@@ -363,7 +364,7 @@ export class RedisCollection<T extends IDable> extends BaseCollection<T> {
         throw new Error('transient error');
       }
       if (!results[0]?.[1]) {
-        throw new Error('duplicate');
+        throw new DuplicateError(this.name);
       }
       return;
     }
@@ -372,7 +373,7 @@ export class RedisCollection<T extends IDable> extends BaseCollection<T> {
       client.checkUpdate(updateArgs[0], updateArgs[1]),
     );
     if (updateCheckResults.some((r) => !r)) {
-      throw new Error('duplicate');
+      throw new DuplicateError(this.name);
     }
 
     let chain = client.multi();

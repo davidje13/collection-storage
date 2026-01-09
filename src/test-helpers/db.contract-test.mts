@@ -2,6 +2,7 @@ import type { TypedParameter, TypedParameters } from 'lean-test';
 import type { DB, DBKeys } from '../core/interfaces/DB.mts';
 import type { Collection } from '../core/interfaces/Collection.mts';
 import type { IDable } from '../core/interfaces/IDable.mts';
+import { DuplicateError } from '../core/DuplicateError.mts';
 import 'lean-test';
 
 const vanillaIt = it;
@@ -162,7 +163,7 @@ export const contract = <T extends DB>({
       const id2 = getUniqueName();
       await col.add({ id: id1, value: 'bar' });
       await col.add({ id: id2, value: 'baz' });
-      await expect(() => col.add({ id: id1, value: 'nope' })).throws('duplicate');
+      await expect(() => col.add({ id: id1, value: 'nope' })).throws(isInstanceOf(DuplicateError));
     });
 
     it('rejects duplicates in unique indices', async ({ getTyped }) => {
@@ -172,7 +173,7 @@ export const contract = <T extends DB>({
 
       await col.add({ id: '1', idx: 8 });
       await col.add({ id: '2', idx: 9 });
-      await expect(() => col.add({ id: '3', idx: 8 })).throws('duplicate');
+      await expect(() => col.add({ id: '3', idx: 8 })).throws(isInstanceOf(DuplicateError));
 
       await col.removeAllAndDestroy();
     });
@@ -385,7 +386,9 @@ export const contract = <T extends DB>({
     });
 
     it('rejects and rolls-back changes which cause duplicates', async ({ getTyped }) => {
-      await expect(() => getTyped(col).where('id', '2').update({ uidx: 'A1' })).throws('duplicate');
+      await expect(() => getTyped(col).where('id', '2').update({ uidx: 'A1' })).throws(
+        isInstanceOf(DuplicateError),
+      );
 
       const v = await getTyped(col).where('id', '2').get();
       expect(v!.uidx).toEqual('A2');
@@ -454,7 +457,7 @@ export const contract = <T extends DB>({
 
     it('rejects conflicts from changing multiple records', async ({ getTyped }) => {
       await expect(() => getTyped(col).where('idxs', '2').update({ uidx: 'multi' })).throws(
-        'duplicate',
+        'Updating multiple records will create duplicates',
       );
       const [v2, v3] = await Promise.all([
         getTyped(col).where('id', '2').get(),
@@ -530,7 +533,7 @@ export const contract = <T extends DB>({
       it('rejects duplicates if no value matches', async ({ getTyped }) => {
         await expect(() =>
           getTyped(col).where('id', '6').update({ uidx: 'A2' }, { upsert: true }),
-        ).throws('duplicate');
+        ).throws(isInstanceOf(DuplicateError));
         expect(await getTyped(col).all().count()).toEqual(3);
       });
     });
@@ -987,7 +990,7 @@ export const migrationContract = <T extends DB>({
     });
 
     await expect(() => col.add({ id: '4', idx: 4, uidx: 'v4', a: 'a4', b: 'b3' })).throws(
-      'duplicate',
+      isInstanceOf(DuplicateError),
     );
 
     expect(new Set(await fromAsync(col.where('b', 'b2').values()))).toEqual(
@@ -1002,7 +1005,7 @@ export const migrationContract = <T extends DB>({
     });
 
     await expect(() => col.add({ id: '4', idx: 3, uidx: 'v4', a: 'a4', b: 'b4' })).throws(
-      'duplicate',
+      isInstanceOf(DuplicateError),
     );
 
     expect(new Set(await fromAsync(col.where('idx', 2).values()))).toEqual(

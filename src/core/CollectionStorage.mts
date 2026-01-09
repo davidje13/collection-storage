@@ -39,10 +39,10 @@ export class CollectionStorageFactory {
 
     try {
       return await builder(url);
-    } catch (e) {
+    } catch (err) {
       throw new Error(
-        `Failed to connect to database "${url}": ${e instanceof Error ? e.message : e}`,
-        { cause: e },
+        `Failed to connect to database "${url}": ${err instanceof Error ? err.message : err}`,
+        { cause: err },
       );
     }
   }

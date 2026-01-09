@@ -8,6 +8,7 @@ import {
   partialDeserialiseRecord,
   type Serialised,
   type CollectionOptions,
+  DuplicateError,
 } from '../core/index.mts';
 import { encodeHStore, decodeHStore } from './hstore.mts';
 import { withIdentifiers } from './sql.mts';
@@ -30,16 +31,24 @@ export class PostgresCollection<T extends IDable> extends BaseCollection<T> {
       const sRecord = serialiseRecord(record);
       const id = sRecord.get('id');
       sRecord.delete('id');
-      await this._runTableQuery('INSERT', id, encodeHStore(sRecord));
+      try {
+        await this._runTableQuery('INSERT', id, encodeHStore(sRecord));
+      } catch (err) {
+        throw isDuplicateError(err) ? new DuplicateError(this.name) : err;
+      }
     }
   }
 
   /** @internal */ protected override async internalUpsert(id: T['id'], update: Partial<T>) {
-    await this._runTableQuery(
-      'UPSERT_ID',
-      serialiseValue(id),
-      encodeHStore(serialiseRecord(update)),
-    );
+    try {
+      await this._runTableQuery(
+        'UPSERT_ID',
+        serialiseValue(id),
+        encodeHStore(serialiseRecord(update)),
+      );
+    } catch (err) {
+      throw isDuplicateError(err) ? new DuplicateError(this.name) : err;
+    }
   }
 
   protected override async internalUpdate<K extends string & keyof T>(
@@ -53,24 +62,23 @@ export class PostgresCollection<T extends IDable> extends BaseCollection<T> {
     sRecord.delete('id');
     const hstore = encodeHStore(sRecord);
 
-    if (filterAttribute === 'id') {
-      await this._runTableQuery('UPDATE_ID', hstore, sValue);
-    } else if (sId !== undefined) {
-      try {
+    try {
+      if (filterAttribute === 'id') {
+        await this._runTableQuery('UPDATE_ID', hstore, sValue);
+      } else if (sId !== undefined) {
         await this._runTableQuery('UPDATE_IF_ID', hstore, filterAttribute, sValue, sId);
-      } catch (e) {
-        if (e instanceof Error && e.message.includes('division by zero')) {
-          // We use /0 to intentionally throw an error in UPDATE_IF_ID to distinguish between
-          // the case of no records found to update, vs. found a record but did not match ID.
-          // Being an error, it causes an automatic rollback of any other changes.
-          // Nothing else can cause a /0 error in this statement.
-          throw new Error('Cannot update ID');
-        } else {
-          throw e;
-        }
+      } else {
+        await this._runTableQuery('UPDATE', hstore, filterAttribute, sValue);
       }
-    } else {
-      await this._runTableQuery('UPDATE', hstore, filterAttribute, sValue);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('division by zero')) {
+        // We use /0 to intentionally throw an error in UPDATE_IF_ID to distinguish between
+        // the case of no records found to update, vs. found a record but did not match ID.
+        // Being an error, it causes an automatic rollback of any other changes.
+        // Nothing else can cause a /0 error in this statement.
+        throw new Error('Cannot update ID');
+      }
+      throw isDuplicateError(err) ? new DuplicateError(this.name) : err;
     }
   }
 
@@ -246,4 +254,8 @@ function fromHStore<T extends object, F extends readonly (string & keyof T)[]>(
   fields?: F,
 ): Pick<T, F[number]> {
   return partialDeserialiseRecord<T, F>(decodeHStore(data).set('id', id) as Serialised<T>, fields);
+}
+
+function isDuplicateError(e: unknown) {
+  return e instanceof Error && e.message.includes('duplicate key value violates unique constraint');
 }
