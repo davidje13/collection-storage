@@ -14,10 +14,10 @@ Redis, PostgreSQL and DynamoDB Local, and configure environment variables to
 reference them. The defaults are:
 
 ```
-MONGO_URL=mongodb://localhost:27017/collection-storage-tests
-REDIS_URL=redis://localhost:6379/15
-PSQL_URL=postgresql://postgres:password@localhost:5432/collection-storage-tests
-DDB_URL=dynamodb://key:secret@localhost:8000/collection-storage-tests-?tls=false&consistentRead=true
+MONGO_URL="mongodb://localhost:27017/collection-storage-tests"
+REDIS_URL="redis://localhost:6379/15"
+PSQL_URL="postgresql://postgres:password@localhost:5432/collection-storage-tests"
+DDB_URL="dynamodb://key:secret@localhost:8000/collection-storage-tests-?tls=false&consistentRead=true"
 ```
 
 **warning**: By default, this will flush any Redis database at index 15. If you
