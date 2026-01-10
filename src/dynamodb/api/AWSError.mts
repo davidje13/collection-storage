@@ -1,8 +1,8 @@
 // https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Programming.Errors.html
 
 export class AWSError extends Error {
-  /** @internal */ private readonly _status: number;
-  /** @internal */ private readonly _type: string;
+  /** @internal */ declare private readonly _status: number;
+  /** @internal */ declare private readonly _type: string;
 
   constructor(status: number, type: string, message: string) {
     super(`AWS error ${status}; type: ${type}; message: ${message}`);

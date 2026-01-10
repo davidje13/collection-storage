@@ -31,9 +31,9 @@ export class WrappedCollection<
   E,
   Inner extends Wrapped<T, WF[number], Storage> = Wrapped<T, WF[number], Storage>,
 > implements Collection<T> {
-  /** @internal */ private readonly _baseCollection: Collection<Inner>;
-  /** @internal */ private readonly _attributes: WF;
-  /** @internal */ private readonly _wrapper: Wrapper<T, WF[number], Storage, E>;
+  /** @internal */ declare private readonly _baseCollection: Collection<Inner>;
+  /** @internal */ declare private readonly _attributes: WF;
+  /** @internal */ declare private readonly _wrapper: Wrapper<T, WF[number], Storage, E>;
 
   constructor(
     baseCollection: Collection<Inner>,

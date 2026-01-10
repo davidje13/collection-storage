@@ -5,9 +5,9 @@ import { defineAllScripts, type ERedis } from './scripts.mts';
 const withRetry = retry((e) => e instanceof Error && e.message === 'transient error');
 
 export class RedisConnectionPool {
-  /** @internal */ private readonly _url: string;
-  /** @internal */ private readonly _options: RedisOptions;
-  /** @internal */ private readonly _maxConnections: number;
+  /** @internal */ declare private readonly _url: string;
+  /** @internal */ declare private readonly _options: RedisOptions;
+  /** @internal */ declare private readonly _maxConnections: number;
   /** @internal */ private readonly _connections: ERedis[] = [];
   /** @internal */ private _inUse = 0;
   /** @internal */ private _queue: ((client: ERedis) => void)[] = [];

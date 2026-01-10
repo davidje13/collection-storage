@@ -14,8 +14,8 @@ import { encodeHStore, decodeHStore } from './hstore.mts';
 import { withIdentifiers } from './sql.mts';
 
 export class PostgresCollection<T extends IDable> extends BaseCollection<T> {
-  /** @internal */ private readonly _pool: PgPoolT;
-  /** @internal */ private readonly _tableName: string;
+  /** @internal */ declare private readonly _pool: PgPoolT;
+  /** @internal */ declare private readonly _tableName: string;
   /** @internal */ private readonly _cachedQueries = new Map<keyof typeof STATEMENTS, string>();
 
   /** @internal */ constructor(options: CollectionOptions<T>, pool: PgPoolT) {

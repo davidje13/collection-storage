@@ -4,7 +4,7 @@ import { RedisCollection } from './RedisCollection.mts';
 import { RedisConnectionPool } from './RedisConnectionPool.mts';
 
 export class RedisDB extends BaseDB {
-  /** @internal */ private readonly _pool: RedisConnectionPool;
+  /** @internal */ declare private readonly _pool: RedisConnectionPool;
 
   private constructor(pool: RedisConnectionPool) {
     super();

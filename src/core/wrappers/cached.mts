@@ -33,11 +33,11 @@ function appendAttr<T extends string, K extends string>(
 }
 
 class CachedCollection<T extends IDable> implements Collection<T> {
-  /** @internal */ private readonly _baseCollection: Collection<T>;
-  /** @internal */ private readonly _maxAge: number;
-  /** @internal */ private readonly _time: () => number;
-  /** @internal */ private readonly _cache: LruCache<string, CacheItem<T>>;
-  /** @internal */ private readonly _customIndexData: Map<
+  /** @internal */ declare private readonly _baseCollection: Collection<T>;
+  /** @internal */ declare private readonly _maxAge: number;
+  /** @internal */ declare private readonly _time: () => number;
+  /** @internal */ declare private readonly _cache: LruCache<string, CacheItem<T>>;
+  /** @internal */ declare private readonly _customIndexData: Map<
     string & keyof T,
     Map<string, Set<string>>
   >;

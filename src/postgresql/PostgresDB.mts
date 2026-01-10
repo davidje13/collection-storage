@@ -3,7 +3,7 @@ import { type DBKeys, BaseDB, type IDable } from '../core/index.mts';
 import { PostgresCollection } from './PostgresCollection.mts';
 
 export class PostgresDB extends BaseDB {
-  /** @internal */ private readonly _pool: Pool;
+  /** @internal */ declare private readonly _pool: Pool;
 
   private constructor(pool: Pool) {
     super();

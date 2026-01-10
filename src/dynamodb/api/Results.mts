@@ -9,8 +9,8 @@ export interface Results<I> {
 }
 
 export class Paged<K, I> implements Results<I> {
-  /** @internal */ private readonly _aws: AWS;
-  /** @internal */ private readonly _fn: (start: K | undefined) => Promise<[I[], K]>;
+  /** @internal */ declare private readonly _aws: AWS;
+  /** @internal */ declare private readonly _fn: (start: K | undefined) => Promise<[I[], K]>;
   /** @internal */ private readonly _pageLimit = Number.POSITIVE_INFINITY;
 
   constructor(

@@ -219,8 +219,8 @@ async function configureTable(
 }
 
 export class DynamoCollection<T extends IDable> extends BaseCollection<T> {
-  /** @internal */ private readonly _ddb: DDB;
-  /** @internal */ private readonly _tableName: string;
+  /** @internal */ declare private readonly _ddb: DDB;
+  /** @internal */ declare private readonly _tableName: string;
   /** @internal */ private readonly _uniqueKeys: (string & keyof T)[] = [];
 
   /** @internal */ constructor(

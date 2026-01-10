@@ -15,9 +15,9 @@ class MigratedCollection<
   T extends IDable,
   ExtraFetchAttributes extends readonly (string & keyof T)[],
 > implements Collection<T> {
-  /** @internal */ private readonly _baseCollection: Collection<T>;
-  /** @internal */ private readonly _extraFetchAttributes: ExtraFetchAttributes | undefined;
-  /** @internal */ private readonly _migrations: Map<string & keyof T, MigrationFunc>;
+  /** @internal */ declare private readonly _baseCollection: Collection<T>;
+  /** @internal */ declare private readonly _extraFetchAttributes: ExtraFetchAttributes | undefined;
+  /** @internal */ declare private readonly _migrations: Map<string & keyof T, MigrationFunc>;
 
   constructor(
     baseCollection: Collection<T>,

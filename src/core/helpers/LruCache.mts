@@ -1,6 +1,6 @@
 export class LruCache<K, V> {
-  /** @internal */ private readonly _capacity: number;
-  /** @internal */ private readonly _flushFn: ((value: V) => void) | undefined;
+  /** @internal */ declare private readonly _capacity: number;
+  /** @internal */ declare private readonly _flushFn: ((value: V) => void) | undefined;
   /** @internal */ private readonly _storage = new Map<K, V>();
 
   constructor(capacity: number, flushFn?: (value: V) => void) {

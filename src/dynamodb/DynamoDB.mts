@@ -37,10 +37,10 @@ const makeThroughputFn =
   };
 
 export class DynamoDB extends BaseDB {
-  /** @internal */ private readonly _aws: AWS;
-  /** @internal */ private readonly _ddb: DDB;
-  /** @internal */ private readonly _tableNamePrefix: string;
-  /** @internal */ private readonly _throughputFn: DbThroughputFn | undefined;
+  /** @internal */ declare private readonly _aws: AWS;
+  /** @internal */ declare private readonly _ddb: DDB;
+  /** @internal */ declare private readonly _tableNamePrefix: string;
+  /** @internal */ declare private readonly _throughputFn: DbThroughputFn | undefined;
 
   private constructor(aws: AWS, ddb: DDB, tableNamePrefix: string, throughputFn?: DbThroughputFn) {
     super();

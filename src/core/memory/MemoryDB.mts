@@ -19,9 +19,9 @@ const globalDbs = getGlobal(
 );
 
 export class MemoryDB extends BaseDB {
-  /** @internal */ private readonly _name: string;
-  /** @internal */ private readonly _backingData: DBBackingData;
-  /** @internal */ private readonly _simulatedLatency: number;
+  /** @internal */ declare private readonly _name: string;
+  /** @internal */ declare private readonly _backingData: DBBackingData;
+  /** @internal */ declare private readonly _simulatedLatency: number;
 
   private constructor(name: string, backingData: DBBackingData, simulatedLatency: number) {
     super();

@@ -3,33 +3,36 @@ import type { IDable } from './IDable.mts';
 import type { DBKeys } from './DB.mts';
 
 export class BaseIndices<T extends IDable> implements Indices<T> {
-  /** @internal */ private readonly _keys: Map<string | keyof T, KeyOptions>;
-  /** @internal */ private readonly _customIndices: (string & keyof T)[];
-  /** @internal */ private readonly _uniqueIndices: (string & keyof T)[];
+  // Note: private properties & methods in this class must not be mangled by terser,
+  // as it can lead to name collisions if sub-classed and (separately) mangled
+
+  /** @internal */ private readonly csKeys: Map<string | keyof T, KeyOptions>;
+  /** @internal */ private readonly csCustom: (string & keyof T)[];
+  /** @internal */ private readonly csUnique: (string & keyof T)[];
 
   constructor(keys: DBKeys<T>) {
-    this._keys = new Map([['id', { unique: true }], ...Object.entries(keys).filter(([, v]) => v)]);
-    this._customIndices = Object.keys(keys) as (string & keyof T)[];
-    this._uniqueIndices = ['id', ...this._customIndices.filter((k) => this._keys.get(k)?.unique)];
+    this.csKeys = new Map([['id', { unique: true }], ...Object.entries(keys).filter(([, v]) => v)]);
+    this.csCustom = Object.keys(keys) as (string & keyof T)[];
+    this.csUnique = ['id', ...this.csCustom.filter((k) => this.csKeys.get(k)?.unique)];
   }
 
   getIndices(): readonly (string & keyof T)[] {
-    return ['id', ...this._customIndices];
+    return ['id', ...this.csCustom];
   }
 
   getUniqueIndices(): readonly (string & keyof T)[] {
-    return this._uniqueIndices;
+    return this.csUnique;
   }
 
   getCustomIndices(): readonly (string & keyof T)[] {
-    return this._customIndices;
+    return this.csCustom;
   }
 
   isIndex(attribute: string | keyof T): boolean {
-    return this._keys.has(attribute);
+    return this.csKeys.has(attribute);
   }
 
   isUniqueIndex(attribute: string | keyof T): boolean {
-    return Boolean(this._keys.get(attribute)?.unique);
+    return Boolean(this.csKeys.get(attribute)?.unique);
   }
 }

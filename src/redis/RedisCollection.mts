@@ -75,8 +75,8 @@ async function mapAwaitSync<T, O>(values: T[], fn: (value: T) => Promise<O>): Pr
 }
 
 export class RedisCollection<T extends IDable> extends BaseCollection<T> {
-  /** @internal */ private readonly _pool: RedisConnectionPool;
-  /** @internal */ private readonly _prefix: string;
+  /** @internal */ declare private readonly _pool: RedisConnectionPool;
+  /** @internal */ declare private readonly _prefix: string;
   /** @internal */ private readonly _keyPrefixes = new Map<string & keyof T, string>();
   /** @internal */ private readonly _uniqueKeys: Key<T>[] = [];
   /** @internal */ private readonly _nonUniqueKeys: Key<T>[] = [];

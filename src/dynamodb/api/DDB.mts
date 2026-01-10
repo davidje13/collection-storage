@@ -282,10 +282,10 @@ function indicesMatch(a: GlobalSecondaryIndexDefinition, b: DDBGlobalSecondaryIn
 }
 
 export class DDB {
-  /** @internal */ private readonly _aws: AWS;
-  /** @internal */ private readonly _host: string;
-  /** @internal */ private readonly _region: string;
-  /** @internal */ private readonly _consistentRead: boolean;
+  /** @internal */ declare private readonly _aws: AWS;
+  /** @internal */ declare private readonly _host: string;
+  /** @internal */ declare private readonly _region: string;
+  /** @internal */ declare private readonly _consistentRead: boolean;
   /** @internal */ private _totalCapacityUnits = 0;
 
   /** @internal */ constructor(

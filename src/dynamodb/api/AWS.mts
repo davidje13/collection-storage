@@ -46,8 +46,8 @@ interface AWSErrorResponse {
 }
 
 export class AWS {
-  /** @internal */ private readonly _keyID: string;
-  /** @internal */ private readonly _baseKey: Buffer;
+  /** @internal */ declare private readonly _keyID: string;
+  /** @internal */ declare private readonly _baseKey: Buffer;
   /** @internal */ private readonly _keyCacheDate = new LruCache<string, Buffer>(1);
   /** @internal */ private readonly _keyCacheRegion = new LruCache<string, Buffer>(4);
   /** @internal */ private readonly _keyCache = new LruCache<string, Buffer>(16);

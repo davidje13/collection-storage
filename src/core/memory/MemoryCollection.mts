@@ -28,8 +28,8 @@ interface CollectionBackingData<T> {
 export type DBBackingData = Map<string, CollectionBackingData<any>>;
 
 export class MemoryCollection<T extends IDable> extends BaseCollection<T> {
-  /** @internal */ private readonly _backing: CollectionBackingData<T>;
-  /** @internal */ private readonly _simulatedLatency: number;
+  /** @internal */ declare private readonly _backing: CollectionBackingData<T>;
+  /** @internal */ declare private readonly _simulatedLatency: number;
 
   /** @internal */ constructor(
     options: CollectionOptions<T>,
