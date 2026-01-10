@@ -15,6 +15,7 @@ const TERSER_OPTS = {
   ecma: 2015,
   module: true,
   format: { ascii_only: true, preserve_annotations: true },
+  keep_classnames: /^.*(DB|Collection)$/,
   mangle: {
     properties: {
       regex: /^_/,

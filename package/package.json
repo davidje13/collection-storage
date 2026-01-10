@@ -1,0 +1,17 @@
+{
+  "name": "collection-storage-package-test",
+  "private": true,
+  "scripts": {
+    "test": "node commonjs.cjs && node es6modules.mjs && tsc --noEmit"
+  },
+  "devDependencies": {
+    "@collection-storage/dynamodb": "file:package-dynamodb.tgz",
+    "@collection-storage/mongodb": "file:package-mongodb.tgz",
+    "@collection-storage/postgresql": "file:package-postgresql.tgz",
+    "@collection-storage/redis": "file:package-redis.tgz",
+    "@collection-storage/sqlite": "file:package-sqlite.tgz",
+    "@types/node": "22.x",
+    "collection-storage": "file:package-core.tgz",
+    "typescript": "5.9.x"
+  }
+}
