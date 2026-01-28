@@ -89,6 +89,26 @@ export const contract = <T extends DB>({
     await col.removeAllAndDestroy();
   });
 
+  it('allows missing values in non-unique indices', async ({ getTyped }) => {
+    const col = getTyped(db).getCollection<{ id: string; idx?: number }>(getUniqueName(), {
+      idx: {},
+    });
+
+    await col.add({ id: '1', idx: 8 }, { id: '2' }, { id: '3' });
+
+    const retrieved = await fromAsync(col.where('idx', 8).values());
+    expect(retrieved).toHaveLength(1);
+    const retrievedIds = retrieved.map(({ id }) => id);
+    expect(new Set(retrievedIds)).toEqual(new Set(['1']));
+
+    expect(await fromAsync(col.where('idx', 0).values())).toHaveLength(0);
+    expect(await fromAsync(col.where('idx', '' as any).values())).toHaveLength(0);
+    expect(await fromAsync(col.where('idx', 'undefined' as any).values())).toHaveLength(0);
+    //expect(await fromAsync(col.where('idx', null as any).values())).toHaveLength(0); // MongoDB considers null <=> undefined - other storage engines do not
+
+    await col.removeAllAndDestroy();
+  });
+
   it('rejects access after closing', async ({ getTyped }) => {
     const col = sharedCol(getTyped(db));
     await col.add({ id: getUniqueName(), value: 'foo' });
@@ -306,6 +326,7 @@ export const contract = <T extends DB>({
         { id: '1', idx: 1, value: 'A1', b: 'B1' },
         { id: '2', idx: 2, value: 'A2', b: 'B2' },
         { id: '3', idx: 2, value: 'A3', b: 'B3' },
+        { id: '4', value: 'A3', b: 'B3' },
       ],
     });
 
@@ -336,7 +357,7 @@ export const contract = <T extends DB>({
 
     it('returns all values if no filter is specified', async ({ getTyped }) => {
       const v = await fromAsync(getTyped(col).all().values());
-      expect(v.length).toEqual(3);
+      expect(v.length).toEqual(4);
     });
   });
 
@@ -347,6 +368,7 @@ export const contract = <T extends DB>({
         { id: '1', idx: 1, value: 'A1', b: 'B1' },
         { id: '2', idx: 2, value: 'A2', b: 'B2' },
         { id: '3', idx: 2, value: 'A3', b: 'B3' },
+        { id: '4', value: 'A3', b: 'B3' },
       ],
     });
 
@@ -359,12 +381,17 @@ export const contract = <T extends DB>({
     });
 
     it('returns the count of all items if no filter is specified', async ({ getTyped }) => {
-      await expect(getTyped(col).all().count()).resolves(3);
+      await expect(getTyped(col).all().count()).resolves(4);
     });
   });
 
   describe('update', () => {
-    const col = withCollection(db, {
+    const col = withCollection<{
+      id: string;
+      idxs: string | undefined;
+      uidx: string;
+      value: string | undefined;
+    }>(db, {
       keys: { idxs: {}, uidx: { unique: true } },
       seed: [
         { id: '1', idxs: '1', uidx: 'A1', value: 'B1' },
@@ -383,6 +410,18 @@ export const contract = <T extends DB>({
       expect(v1!.value).toEqual('B1');
       expect(v2!.value).toEqual('updated');
       expect(v3!.value).toEqual('B3');
+    });
+
+    it('updates indices for changed attributes', async ({ getTyped }) => {
+      await getTyped(col).where('id', '2').update({ idxs: '1' });
+
+      const retrieved1 = await fromAsync(getTyped(col).where('idxs', '1').values());
+      const retrievedIds1 = retrieved1.map(({ id }) => id);
+      expect(new Set(retrievedIds1)).toEqual(new Set(['1', '2']));
+
+      const retrieved2 = await fromAsync(getTyped(col).where('idxs', '2').values());
+      const retrievedIds2 = retrieved2.map(({ id }) => id);
+      expect(new Set(retrievedIds2)).toEqual(new Set(['3']));
     });
 
     it('rejects and rolls-back changes which cause duplicates', async ({ getTyped }) => {
@@ -870,6 +909,8 @@ export const contract = <T extends DB>({
         { name: 'special characters - quotes', value: 'test\'a"b' },
         { name: 'special characters - backslash', value: 'test\\a\\' },
         { name: 'special characters - punctuation', value: 'a-b_c+d=e&f$g!h:i;j?k,l.m%n' },
+        { name: 'special characters - high unicode values', value: '\u2026' },
+        { name: 'special characters - very high unicode values', value: '\u{1F33C}' },
         { name: 'leading underscore', value: '_foo' },
         { name: 'function-like string', value: '$or' },
         {
