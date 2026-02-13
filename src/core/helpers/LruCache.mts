@@ -107,7 +107,7 @@ export class LruCache<K, V> {
     clearTimeout(this._purgeTm);
     this._purgeTm =
       this._storage.size && this._purgeInterval
-        ? setTimeout(this.purge, this._purgeInterval)
+        ? setTimeout(this.purge, this._purgeInterval).unref()
         : undefined;
   }
 
@@ -119,7 +119,7 @@ export class LruCache<K, V> {
     }
 
     if (!this._purgeTm && this._purgeInterval) {
-      this._purgeTm = setTimeout(this.purge, this._purgeInterval);
+      this._purgeTm = setTimeout(this.purge, this._purgeInterval).unref();
     }
   }
 }
