@@ -452,8 +452,8 @@ class CachedCollection<T extends IDable> implements Collection<T> {
 
   /** @internal */ private _store(serialised: Serialised<T>, partial: boolean): void {
     const cacheItem = { serialised, partial, time: this._time() };
-    this._populateIndices(cacheItem);
     this._cache.add(serialised.get('id')!, cacheItem);
+    this._populateIndices(cacheItem);
   }
 
   /** @internal */ private _cachedById<F extends readonly (string & keyof T)[]>(

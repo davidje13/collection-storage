@@ -331,6 +331,11 @@ describe('cache', () => {
         expect(await getTyped(col).where('id', 'i1').get()).not(toBeNull()); // still exists
         expect(await getTyped(col).where('id', 'i2').get()).not(toBeNull()); // could still exist (get returned a value)
         expect(await getTyped(col).where('id', 'i3').get()).toBeNull(); // detected removed (get returned null)
+
+        await getTyped(backingCol).where('id', 'i1').remove();
+        await getTyped(col).where('nonunique', 'n1').get(); // update cache
+        expect(await getTyped(col).where('id', 'i1').get()).toBeNull(); // detected removed
+        expect(await getTyped(col).where('id', 'i2').get()).toBeNull(); // detected removed
       },
     );
 
