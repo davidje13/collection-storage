@@ -53,7 +53,12 @@ class CachedCollection<T extends IDable> implements Collection<T> {
     this._baseCollection = baseCollection;
     this._maxAge = maxAge;
     this._time = time;
-    this._cache = new LruCache(capacity, this._removeIndices.bind(this));
+    this._cache = new LruCache(
+      capacity,
+      this._removeIndices.bind(this),
+      (o) => time() > o.time + maxAge,
+      maxAge + 100,
+    );
     this._customIndexData = new Map(
       baseCollection.indices.getCustomIndices().map((k) => [k, new Map()]),
     );

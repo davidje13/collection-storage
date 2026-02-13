@@ -1,11 +1,25 @@
 export class LruCache<K, V> {
   /** @internal */ declare private readonly _capacity: number;
   /** @internal */ declare private readonly _flushFn: ((value: V) => void) | undefined;
+  /** @internal */ declare private readonly _purgeFresh: (value: V) => boolean;
+  /** @internal */ declare private readonly _purgeInterval: number | undefined;
+  /** @internal */ declare private _purgeTm: NodeJS.Timeout | undefined;
   /** @internal */ private readonly _storage = new Map<K, V>();
 
-  constructor(capacity: number, flushFn?: (value: V) => void) {
+  constructor(
+    capacity: number,
+    flushFn?: (value: V) => void,
+    purgeFresh: (value: V) => boolean = always,
+    purgeInterval = Number.POSITIVE_INFINITY,
+  ) {
     this._capacity = capacity;
     this._flushFn = flushFn;
+    this._purgeFresh = purgeFresh;
+    this._purgeInterval =
+      Number.isFinite(purgeInterval) && purgeInterval > 0
+        ? Math.min(purgeInterval, 1000 * 60 * 60 * 24)
+        : undefined;
+    this.purge = this.purge.bind(this);
   }
 
   cached(key: K, calc: (key: K) => V, fresh: (value: V) => boolean = always): V {
@@ -58,6 +72,10 @@ export class LruCache<K, V> {
     } else {
       this._storage.delete(key);
     }
+    if (!this._storage.size && this._purgeTm) {
+      clearTimeout(this._purgeTm);
+      this._purgeTm = undefined;
+    }
   }
 
   clear() {
@@ -70,6 +88,27 @@ export class LruCache<K, V> {
     } else {
       this._storage.clear();
     }
+    clearTimeout(this._purgeTm);
+    this._purgeTm = undefined;
+  }
+
+  purge() {
+    try {
+      for (const [key, value] of [...this._storage]) {
+        if (!this._purgeFresh(value)) {
+          if (this._storage.delete(key)) {
+            this._flushFn?.(value);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error while purging LruCache', err);
+    }
+    clearTimeout(this._purgeTm);
+    this._purgeTm =
+      this._storage.size && this._purgeInterval
+        ? setTimeout(this.purge, this._purgeInterval)
+        : undefined;
   }
 
   /** @internal */ private _internalAdd(key: K, value: V) {
@@ -77,6 +116,10 @@ export class LruCache<K, V> {
 
     while (this._storage.size > this._capacity) {
       this.remove(this._storage.keys().next().value!);
+    }
+
+    if (!this._purgeTm && this._purgeInterval) {
+      this._purgeTm = setTimeout(this.purge, this._purgeInterval);
     }
   }
 }
